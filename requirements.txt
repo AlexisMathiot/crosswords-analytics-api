@@ -1,0 +1,29 @@
+# FastAPI et serveur ASGI
+fastapi==0.122.0
+uvicorn[standard]==0.38.0
+
+# Base de données
+sqlalchemy==2.0.40
+psycopg2-binary==2.9.11
+# Alternative moderne à psycopg2 (optionnel)
+# psycopg[binary]==3.2.3
+
+# Analyse de données
+pandas==2.3.3
+numpy==2.2.2
+
+# Cache et configuration
+redis==7.1.0
+python-dotenv==1.0.1
+
+# Validation et sérialisation
+pydantic>=2.12.2
+pydantic-settings>=2.7.0
+
+# Utilitaires
+httpx==0.28.1
+
+# Développement et tests
+pytest==8.3.4
+pytest-asyncio==0.25.2
+ruff==0.9.1
