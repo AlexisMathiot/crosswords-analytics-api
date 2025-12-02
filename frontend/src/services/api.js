@@ -32,6 +32,11 @@ export const statisticsAPI = {
     return response.data;
   },
 
+  getCompletionTimeDistribution: async (gridId) => {
+    const response = await api.get(`/api/v1/statistics/grid/${gridId}/completion-time-distribution`);
+    return response.data;
+  },
+
   getTemporalStatistics: async (gridId) => {
     const response = await api.get(`/api/v1/statistics/grid/${gridId}/temporal`);
     return response.data;

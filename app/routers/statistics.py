@@ -105,6 +105,29 @@ async def get_score_distribution(grid_id: int, db: Session = Depends(get_db)):
         )
 
 
+@router.get("/grid/{grid_id}/completion-time-distribution")
+async def get_completion_time_distribution(grid_id: int, db: Session = Depends(get_db)):
+    """Get completion time distribution for visualization (histogram data).
+
+    Args:
+        grid_id: Grid identifier
+        db: Database session
+
+    Returns:
+        dict: Completion time distribution with bins for histogram
+    """
+    try:
+        distribution = statistics_service.get_completion_time_distribution(db, grid_id)
+        return distribution
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error calculating completion time distribution: {str(e)}",
+        )
+
+
 @router.get("/grid/{grid_id}/temporal")
 async def get_temporal_statistics(grid_id: int, db: Session = Depends(get_db)):
     """Get temporal statistics for a specific grid (submission times analysis).

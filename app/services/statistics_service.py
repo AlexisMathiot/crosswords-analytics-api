@@ -262,6 +262,59 @@ def get_score_distribution(db: Session, grid_id: int, num_bins: int = 20) -> dic
     }
 
 
+def get_completion_time_distribution(
+    db: Session, grid_id: int, num_bins: int = 20
+) -> dict:
+    """Get completion time distribution for histogram visualization.
+
+    Args:
+        db: Database session
+        grid_id: Grid identifier
+        num_bins: Number of bins for histogram
+
+    Returns:
+        dict: Distribution data with bins for completion times
+
+    Raises:
+        ValueError: If grid not found
+    """
+    # Verify grid exists
+    grid = db.query(Grid).filter(Grid.id == grid_id).first()
+    if not grid:
+        raise ValueError(f"Grid {grid_id} not found")
+
+    # Fetch completion times
+    times = (
+        db.query(Submission.completion_time_seconds)
+        .filter(Submission.grid_id == grid_id)
+        .all()
+    )
+
+    if not times:
+        return {"bins": [], "counts": []}
+
+    # Convert to numpy array
+    times_array = np.array([t[0] for t in times])
+
+    # Create histogram
+    counts, bin_edges = np.histogram(times_array, bins=num_bins)
+
+    return {
+        "bins": [
+            {
+                "start": int(bin_edges[i]),
+                "end": int(bin_edges[i + 1]),
+                "count": int(counts[i]),
+            }
+            for i in range(len(counts))
+        ],
+        "min": int(times_array.min()),
+        "max": int(times_array.max()),
+        "mean": float(times_array.mean()),
+        "median": float(np.median(times_array)),
+    }
+
+
 def calculate_temporal_stats(db: Session, grid_id: int) -> dict:
     """Calculate temporal statistics for a grid (submission times analysis).
 
@@ -372,13 +425,13 @@ def calculate_temporal_stats(db: Session, grid_id: int) -> dict:
 
 
 def calculate_global_stats(db: Session) -> dict:
-    """Calculate global platform statistics.
+    """Calculate global platform statistics with per-grid breakdown.
 
     Args:
         db: Database session
 
     Returns:
-        dict: Global statistics
+        dict: Global statistics including per-grid data
     """
     total_users = db.query(func.count(User.id)).scalar()
     total_grids = db.query(func.count(Grid.id)).scalar()
@@ -386,6 +439,85 @@ def calculate_global_stats(db: Session) -> dict:
         db.query(func.count(Grid.id)).filter(Grid.published_at.isnot(None)).scalar()
     )
     total_submissions = db.query(func.count(Submission.id)).scalar()
+
+    # Fetch per-grid statistics
+    grids_query = (
+        db.query(
+            Grid.id,
+            Grid.version,
+            Submission.grid_id,
+            Submission.words_found,
+            Submission.total_words,
+            Submission.joker_used,
+            Submission.completion_time_seconds,
+        )
+        .outerjoin(Submission, Grid.id == Submission.grid_id)
+        .filter(Grid.published_at.isnot(None))
+    )
+
+    # Convert to DataFrame for analysis
+    df = pd.read_sql(grids_query.statement, db.bind)
+
+    grids_stats = []
+    if not df.empty and "grid_id" in df.columns:
+        # Group by grid
+        for grid_id in df["id"].unique():
+            grid_df = df[df["id"] == grid_id]
+            grid_submissions = grid_df[grid_df["grid_id"].notna()]
+
+            if len(grid_submissions) > 0:
+                # Calculate completion rate
+                completed = (
+                    grid_submissions["words_found"] == grid_submissions["total_words"]
+                ).sum()
+                completion_rate = (completed / len(grid_submissions)) * 100
+
+                # Calculate joker usage rate
+                joker_used_count = grid_submissions["joker_used"].sum()
+                joker_rate = (joker_used_count / len(grid_submissions)) * 100
+
+                # Get total words for this grid (same for all submissions)
+                total_words = int(grid_submissions["total_words"].iloc[0])
+
+                # Calculate average words found
+                avg_words_found = grid_submissions["words_found"].mean()
+
+                # Calculate median completion time
+                median_time = grid_submissions["completion_time_seconds"].median()
+
+                # Get grid version
+                grid_version = str(grid_df["version"].iloc[0])
+
+                grids_stats.append(
+                    {
+                        "gridId": int(grid_id),
+                        "gridVersion": grid_version,
+                        "totalPlayers": int(len(grid_submissions)),
+                        "completionRate": round(float(completion_rate), 1),
+                        "jokerUsageRate": round(float(joker_rate), 1),
+                        "totalWords": total_words,
+                        "averageWordsFound": round(float(avg_words_found), 1),
+                        "medianCompletionTime": int(median_time),
+                    }
+                )
+            else:
+                # Grid without submissions
+                grid_version = str(grid_df["version"].iloc[0])
+                grids_stats.append(
+                    {
+                        "gridId": int(grid_id),
+                        "gridVersion": grid_version,
+                        "totalPlayers": 0,
+                        "completionRate": 0.0,
+                        "jokerUsageRate": 0.0,
+                        "totalWords": 0,
+                        "averageWordsFound": 0.0,
+                        "medianCompletionTime": 0,
+                    }
+                )
+
+    # Sort by gridId
+    grids_stats.sort(key=lambda x: x["gridId"])
 
     return {
         "totalUsers": total_users,
@@ -395,4 +527,5 @@ def calculate_global_stats(db: Session) -> dict:
         "averageSubmissionsPerGrid": round(total_submissions / total_grids, 2)
         if total_grids > 0
         else 0,
+        "gridStats": grids_stats,
     }
