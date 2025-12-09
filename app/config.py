@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # CORS (comma-separated string)
-    cors_origins_str: str = "http://localhost,http://localhost:80,http://localhost:3000,http://localhost:5173,http://localhost:8000,https://crosswords-mvp-analytics.vercel.app"
+    cors_origins_str: str = "http://localhost,http://localhost:80,http://localhost:3000,http://localhost:5173,http://localhost:8000,https://crosswords-mvp-analytics.vercel.app,https://crosswords-analytics-front.vercel.app"
 
     @cached_property
     def cors_origins(self) -> list[str]:
