@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Grid
 from app.services import statistics_service
+from app.services.statistics_service import extract_grid_number
 
 router = APIRouter()
 
@@ -18,10 +19,17 @@ async def get_available_grids(db: Session = Depends(get_db)):
         db: Database session
 
     Returns:
-        list: List of grids with id and version
+        list: List of grids with id, gridNumber, and version
     """
     grids = db.query(Grid.id, Grid.version).order_by(Grid.id).all()
-    return [{"id": grid_id, "version": version} for grid_id, version in grids]
+    return [
+        {
+            "id": grid_id,
+            "gridNumber": extract_grid_number(version),
+            "version": version,
+        }
+        for grid_id, version in grids
+    ]
 
 
 @router.get("/grid/{grid_id}")

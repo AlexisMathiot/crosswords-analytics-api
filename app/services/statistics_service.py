@@ -8,6 +8,22 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import Grid, Submission, User
+import re
+
+
+def extract_grid_number(version: str | None) -> int | None:
+    """Extract the grid number from a version string.
+
+    Args:
+        version: Version string like "1-grid-13.0" or "1-grid-13.2"
+
+    Returns:
+        int: The grid number (e.g., 13) or None if not found
+    """
+    if not version:
+        return None
+    match = re.search(r"-grid-(\d+)", version)
+    return int(match.group(1)) if match else None
 
 
 def calculate_grid_stats(db: Session, grid_id: int) -> dict:
@@ -54,6 +70,7 @@ def calculate_grid_stats(db: Session, grid_id: int) -> dict:
     if df.empty:
         return {
             "gridId": grid_id,
+            "gridNumber": extract_grid_number(grid.version),
             "gridVersion": grid.version,
             "totalPlayers": 0,
             "totalSubmissions": 0,
@@ -132,6 +149,7 @@ def calculate_grid_stats(db: Session, grid_id: int) -> dict:
 
     return {
         "gridId": grid_id,
+        "gridNumber": extract_grid_number(grid.version),
         "gridVersion": grid.version,
         "totalPlayers": total_players,
         "totalSubmissions": total_submissions,
@@ -348,6 +366,7 @@ def calculate_temporal_stats(db: Session, grid_id: int) -> dict:
     if df.empty:
         return {
             "gridId": grid_id,
+            "gridNumber": extract_grid_number(grid.version),
             "gridVersion": grid.version,
             "totalSubmissions": 0,
             "message": "No submissions yet for this grid",
@@ -411,6 +430,7 @@ def calculate_temporal_stats(db: Session, grid_id: int) -> dict:
 
     return {
         "gridId": grid_id,
+        "gridNumber": extract_grid_number(grid.version),
         "gridVersion": grid.version,
         "totalSubmissions": total_submissions,
         "firstSubmission": first_submission.isoformat(),
@@ -531,6 +551,7 @@ def calculate_global_stats(
                 grids_stats.append(
                     {
                         "gridId": int(grid_id),
+                        "gridNumber": extract_grid_number(grid_version),
                         "gridVersion": grid_version,
                         "totalPlayers": int(len(grid_submissions)),
                         "completionRate": round(float(completion_rate), 1),
@@ -546,6 +567,7 @@ def calculate_global_stats(
                 grids_stats.append(
                     {
                         "gridId": int(grid_id),
+                        "gridNumber": extract_grid_number(grid_version),
                         "gridVersion": grid_version,
                         "totalPlayers": 0,
                         "completionRate": 0.0,
