@@ -25,6 +25,8 @@ ENV/
 
 # Devbox
 .devbox/
+devbox.json
+devbox.lock
 devbox.d/
 
 # SQL dumps
