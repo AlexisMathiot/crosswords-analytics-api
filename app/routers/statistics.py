@@ -158,6 +158,21 @@ async def get_temporal_statistics(grid_id: int, db: Session = Depends(get_db)):
         )
 
 
+@router.get("/users/monthly")
+async def get_new_users_per_month(db: Session = Depends(get_db)):
+    """Get the number of new user registrations per month.
+
+    Returns:
+        list: Monthly counts sorted chronologically
+    """
+    try:
+        return statistics_service.get_new_users_per_month(db)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching monthly users: {str(e)}"
+        )
+
+
 @router.get("/global")
 async def get_global_statistics(
     db: Session = Depends(get_db),

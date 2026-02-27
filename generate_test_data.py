@@ -644,14 +644,15 @@ def create_test_grid(conn, grid_data: dict) -> tuple[int, str, int]:
     # Insert grid
     cursor.execute(
         """
-        INSERT INTO grids (version, grid_rows, grid_cols, is_active, is_archived, published_at, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO grids (version, grid_rows, grid_cols, is_active, is_archived, is_revision, published_at, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             grid_data["version"],
             grid_data["rows"],
             grid_data["cols"],
             True,
+            False,
             False,
             datetime.now(),
             datetime.now(),
@@ -678,8 +679,8 @@ def create_test_grid(conn, grid_data: dict) -> tuple[int, str, int]:
             cursor.execute(
                 """
                 INSERT INTO words (clue_id, display_order, clue_text, start_position, direction,
-                                   answer_hash, encrypted_answer, is_long_clue, is_subscriber_clue)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                   answer_hash, encrypted_answer, is_long_clue, is_subscriber_clue, is_theme_clue)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     clue_id,
@@ -691,6 +692,7 @@ def create_test_grid(conn, grid_data: dict) -> tuple[int, str, int]:
                     encrypted_answer,
                     word_data.get("isLongClue", False),
                     word_data.get("isSubscriberClue", False),
+                    False,
                 ),
             )
             total_words += 1
@@ -750,8 +752,8 @@ def create_revision_grid(
             cursor.execute(
                 """
                 INSERT INTO words (clue_id, display_order, clue_text, start_position, direction,
-                                   answer_hash, encrypted_answer, is_long_clue, is_subscriber_clue)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                   answer_hash, encrypted_answer, is_long_clue, is_subscriber_clue, is_theme_clue)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     clue_id,
@@ -763,6 +765,7 @@ def create_revision_grid(
                     encrypted_answer,
                     word_data.get("isLongClue", False),
                     word_data.get("isSubscriberClue", False),
+                    False,
                 ),
             )
             total_words += 1

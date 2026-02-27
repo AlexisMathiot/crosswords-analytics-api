@@ -543,6 +543,33 @@ def calculate_temporal_stats(db: Session, grid_id: int) -> dict:
     }
 
 
+def get_new_users_per_month(db: Session) -> list[dict]:
+    """Get the number of new users registered per month.
+
+    Args:
+        db: Database session
+
+    Returns:
+        list: Monthly user registration counts, sorted chronologically
+    """
+    query = db.query(User.created_at)
+    df = pd.read_sql(query.statement, db.bind)
+
+    if df.empty:
+        return []
+
+    df["created_at"] = pd.to_datetime(df["created_at"])
+    df["month"] = df["created_at"].dt.to_period("M")
+
+    monthly = df.groupby("month").size().reset_index(name="count")
+    monthly = monthly.sort_values("month")
+
+    return [
+        {"month": str(row["month"]), "count": int(row["count"])}
+        for _, row in monthly.iterrows()
+    ]
+
+
 def calculate_global_stats(
     db: Session,
     start_date: str | None = None,

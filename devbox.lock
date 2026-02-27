@@ -5,6 +5,103 @@
       "last_modified": "2025-11-27T07:58:14Z",
       "resolved": "github:NixOS/nixpkgs/0d59e0290eefe0f12512043842d7096c4070f30e?lastModified=1764230294"
     },
+    "glibcLocales@latest": {
+      "last_modified": "2026-02-23T15:40:43Z",
+      "resolved": "github:NixOS/nixpkgs/80d901ec0377e19ac3f7bb8c035201e2e098cc97#glibcLocales",
+      "source": "devbox-search",
+      "version": "2.42-51",
+      "systems": {
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/2m0bi1my8d60caywvn71iw3gqn3qy9vc-glibc-locales-2.42-51",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/2m0bi1my8d60caywvn71iw3gqn3qy9vc-glibc-locales-2.42-51"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/0qlmqvyckf8zyx03n00azgznnkzgi5xw-glibc-locales-2.42-51",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/0qlmqvyckf8zyx03n00azgznnkzgi5xw-glibc-locales-2.42-51"
+        }
+      }
+    },
+    "mariadb@latest": {
+      "last_modified": "2026-02-23T15:40:43Z",
+      "plugin_version": "0.0.4",
+      "resolved": "github:NixOS/nixpkgs/80d901ec0377e19ac3f7bb8c035201e2e098cc97#mariadb_118",
+      "source": "devbox-search",
+      "version": "11.8.5",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/rv2fsl3h7xnvckny56bf85z0a7n18s4p-mariadb-server-11.8.5",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/s28rnniaqxs15d5v6by14757jg2gv443-mariadb-server-11.8.5-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/rv2fsl3h7xnvckny56bf85z0a7n18s4p-mariadb-server-11.8.5"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/phj4lwxgiszqmfp9xc73xpg8sq5k4c4s-mariadb-server-11.8.5",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/mhvw9f2knisjp7skmxqak3r9y3ck6lc5-mariadb-server-11.8.5-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/phj4lwxgiszqmfp9xc73xpg8sq5k4c4s-mariadb-server-11.8.5"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/li8rs5a9h3si7h28hphhshryd0f6r6w7-mariadb-server-11.8.5",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/86ac2mrvhv5yimqbsmfqlqrm581lm6ba-mariadb-server-11.8.5-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/li8rs5a9h3si7h28hphhshryd0f6r6w7-mariadb-server-11.8.5"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/ay3f7ycc0lr5104wlfhsxjzlx0m4n3cm-mariadb-server-11.8.5",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/j91paxnx8m4j10fnafcxxypz7232zj55-mariadb-server-11.8.5-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/ay3f7ycc0lr5104wlfhsxjzlx0m4n3cm-mariadb-server-11.8.5"
+        }
+      }
+    },
     "python@3.12.11": {
       "last_modified": "2025-10-22T20:59:19Z",
       "plugin_version": "0.0.4",
