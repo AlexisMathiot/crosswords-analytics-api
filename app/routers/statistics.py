@@ -167,15 +167,43 @@ async def get_temporal_statistics(grid_id: int, db: Session = Depends(get_db)):
         )
 
 
+@router.get("/users/registrations")
+async def get_new_users_registrations(
+    granularity: str = "month",
+    db: Session = Depends(get_db),
+):
+    """Get the number of new user registrations per period.
+
+    Args:
+        granularity: Grouping period - "week" or "month" (default: "month")
+        db: Database session
+
+    Returns:
+        list: Registration counts per period, sorted chronologically
+    """
+    if granularity not in ("week", "month"):
+        raise HTTPException(
+            status_code=400, detail="granularity must be 'week' or 'month'"
+        )
+    try:
+        return statistics_service.get_new_users_per_period(db, granularity)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching user registrations: {str(e)}"
+        )
+
+
 @router.get("/users/monthly")
 async def get_new_users_per_month(db: Session = Depends(get_db)):
     """Get the number of new user registrations per month.
+
+    Deprecated: Use /users/registrations?granularity=month instead.
 
     Returns:
         list: Monthly counts sorted chronologically
     """
     try:
-        return statistics_service.get_new_users_per_month(db)
+        return statistics_service.get_new_users_per_period(db, "month")
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error fetching monthly users: {str(e)}"

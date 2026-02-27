@@ -565,14 +565,17 @@ def calculate_temporal_stats(db: Session, grid_id: int) -> dict:
     }
 
 
-def get_new_users_per_month(db: Session) -> list[dict]:
-    """Get the number of new users registered per month.
+def get_new_users_per_period(
+    db: Session, granularity: str = "month"
+) -> list[dict]:
+    """Get the number of new users registered per period.
 
     Args:
         db: Database session
+        granularity: "week" or "month"
 
     Returns:
-        list: Monthly user registration counts, sorted chronologically
+        list: User registration counts per period, sorted chronologically
     """
     query = db.query(User.created_at)
     df = pd.read_sql(query.statement, db.bind)
@@ -581,15 +584,29 @@ def get_new_users_per_month(db: Session) -> list[dict]:
         return []
 
     df["created_at"] = pd.to_datetime(df["created_at"])
-    df["month"] = df["created_at"].dt.to_period("M")
 
-    monthly = df.groupby("month").size().reset_index(name="count")
-    monthly = monthly.sort_values("month")
+    if granularity == "week":
+        df["period"] = df["created_at"].dt.to_period("W")
+    else:
+        df["period"] = df["created_at"].dt.to_period("M")
 
-    return [
-        {"month": str(row["month"]), "count": int(row["count"])}
-        for _, row in monthly.iterrows()
-    ]
+    grouped = df.groupby("period").size().reset_index(name="count")
+    grouped = grouped.sort_values("period")
+
+    if granularity == "week":
+        return [
+            {
+                "period": f"{row['period'].start_time.strftime('%Y-W%V')}",
+                "startDate": row["period"].start_time.strftime("%Y-%m-%d"),
+                "count": int(row["count"]),
+            }
+            for _, row in grouped.iterrows()
+        ]
+    else:
+        return [
+            {"period": str(row["period"]), "count": int(row["count"])}
+            for _, row in grouped.iterrows()
+        ]
 
 
 def calculate_global_stats(
