@@ -25,6 +25,13 @@ ENV/
 
 # Devbox
 .devbox/
+devbox.d/
+
+# SQL dumps
+*.sql
+
+# IDE config
+pyrightconfig.json
 
 # Testing
 .pytest_cache/
