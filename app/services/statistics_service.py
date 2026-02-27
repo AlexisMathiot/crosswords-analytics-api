@@ -380,7 +380,7 @@ def get_score_distribution(db: Session, grid_id: int, num_bins: int = 20) -> dic
 
 
 def get_completion_time_distribution(
-    db: Session, grid_id: int, num_bins: int = 20
+    db: Session, grid_id: int, num_bins: int = 20, max_seconds: int | None = None
 ) -> dict:
     """Get completion time distribution for histogram visualization.
 
@@ -390,6 +390,7 @@ def get_completion_time_distribution(
         db: Database session
         grid_id: Grid identifier (can be parent or any revision)
         num_bins: Number of bins for histogram
+        max_seconds: Optional upper bound in seconds to filter outliers
 
     Returns:
         dict: Distribution data with bins for completion times
@@ -408,10 +409,29 @@ def get_completion_time_distribution(
     )
 
     if not times:
-        return {"bins": [], "counts": []}
+        return {
+            "bins": [],
+            "counts": [],
+            "totalSubmissions": 0,
+            "filteredSubmissions": 0,
+        }
 
     # Convert to numpy array
     times_array = np.array([t[0] for t in times])
+    total_submissions = len(times_array)
+
+    # Filter outliers if max_seconds is set
+    if max_seconds is not None:
+        times_array = times_array[times_array <= max_seconds]
+
+    filtered_submissions = len(times_array)
+
+    if filtered_submissions == 0:
+        return {
+            "bins": [],
+            "totalSubmissions": total_submissions,
+            "filteredSubmissions": 0,
+        }
 
     # Create histogram
     counts, bin_edges = np.histogram(times_array, bins=num_bins)
@@ -429,6 +449,8 @@ def get_completion_time_distribution(
         "max": int(times_array.max()),
         "mean": float(times_array.mean()),
         "median": float(np.median(times_array)),
+        "totalSubmissions": total_submissions,
+        "filteredSubmissions": filtered_submissions,
     }
 
 
@@ -606,7 +628,9 @@ def calculate_global_stats(
     family_roots = set()
     published_family_roots = set()
     for grid in all_grids:
-        root_id = grid.parent_grid_id if grid.is_revision and grid.parent_grid_id else grid.id
+        root_id = (
+            grid.parent_grid_id if grid.is_revision and grid.parent_grid_id else grid.id
+        )
         family_roots.add(root_id)
         if grid.published_at is not None:
             published_family_roots.add(root_id)

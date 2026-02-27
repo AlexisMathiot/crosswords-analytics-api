@@ -107,18 +107,27 @@ async def get_score_distribution(grid_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/grid/{grid_id}/completion-time-distribution")
-async def get_completion_time_distribution(grid_id: int, db: Session = Depends(get_db)):
+async def get_completion_time_distribution(
+    grid_id: int,
+    max_minutes: int | None = None,
+    db: Session = Depends(get_db),
+):
     """Get completion time distribution for visualization (histogram data).
 
     Args:
         grid_id: Grid identifier
+        max_minutes: Optional upper bound in minutes to filter outliers
         db: Database session
 
     Returns:
-        dict: Completion time distribution with bins for histogram
+        dict: Completion time distribution with bins for histogram.
+            Includes totalSubmissions and filteredSubmissions counts.
     """
     try:
-        distribution = statistics_service.get_completion_time_distribution(db, grid_id)
+        max_seconds = max_minutes * 60 if max_minutes is not None else None
+        distribution = statistics_service.get_completion_time_distribution(
+            db, grid_id, max_seconds=max_seconds
+        )
         return distribution
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
