@@ -210,6 +210,46 @@ async def get_new_users_per_month(db: Session = Depends(get_db)):
         )
 
 
+@router.get("/users/activity")
+async def get_user_activity(
+    months_lookback: int = 6,
+    min_active_months: int = 2,
+    db: Session = Depends(get_db),
+):
+    """Get user activity and retention statistics.
+
+    Tracks active users per month based on game activity (submissions and
+    progressions). A user is considered "active" in a month if they submitted
+    or saved progress on at least one grid.
+
+    Args:
+        months_lookback: Number of months to analyze (1-24, default: 6)
+        min_active_months: Minimum months active to be "regular" (default: 2)
+        db: Database session
+
+    Returns:
+        dict: Activity timeline, regular user stats, retention rates,
+              and activity frequency distribution
+    """
+    if months_lookback < 1 or months_lookback > 24:
+        raise HTTPException(
+            status_code=400, detail="months_lookback must be between 1 and 24"
+        )
+    if min_active_months < 1 or min_active_months > months_lookback:
+        raise HTTPException(
+            status_code=400,
+            detail="min_active_months must be between 1 and months_lookback",
+        )
+    try:
+        return statistics_service.get_user_activity_stats(
+            db, months_lookback, min_active_months
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error calculating user activity: {str(e)}"
+        )
+
+
 @router.get("/global")
 async def get_global_statistics(
     db: Session = Depends(get_db),

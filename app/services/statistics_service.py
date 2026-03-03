@@ -6,9 +6,11 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-
-from app.models import Grid, Submission, User
+from datetime import datetime
 import re
+from dateutil.relativedelta import relativedelta
+
+from app.models import Grid, Progression, Submission, User
 
 
 def extract_grid_number(version: str | None) -> int | None:
@@ -565,9 +567,7 @@ def calculate_temporal_stats(db: Session, grid_id: int) -> dict:
     }
 
 
-def get_new_users_per_period(
-    db: Session, granularity: str = "month"
-) -> list[dict]:
+def get_new_users_per_period(db: Session, granularity: str = "month") -> list[dict]:
     """Get the number of new users registered per period.
 
     Args:
@@ -802,4 +802,179 @@ def calculate_global_stats(
         if unique_families > 0
         else 0,
         "gridStats": grids_stats,
+    }
+
+
+def _fetch_activity_data(db: Session, months_lookback: int) -> pd.DataFrame:
+    """Fetch user activity from submissions and progressions.
+
+    Returns a DataFrame with columns: user_id, activity_date, period.
+    """
+    cutoff = (datetime.now() - relativedelta(months=months_lookback)).replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    )
+
+    submissions_query = db.query(
+        Submission.user_id,
+        Submission.submitted_at.label("activity_date"),
+    ).filter(Submission.submitted_at >= cutoff)
+
+    df = pd.read_sql(submissions_query.statement, db.bind)
+
+    try:
+        progressions_query = db.query(
+            Progression.user_id,
+            Progression.last_saved_at.label("activity_date"),
+        ).filter(Progression.last_saved_at >= cutoff)
+        df_prog = pd.read_sql(progressions_query.statement, db.bind)
+        df = pd.concat([df, df_prog], ignore_index=True)
+    except Exception:
+        pass  # progression table may not exist yet
+
+    if df.empty:
+        return df
+
+    df["user_id"] = df["user_id"].apply(bytes)
+    df["activity_date"] = pd.to_datetime(df["activity_date"])
+    df["period"] = df["activity_date"].dt.to_period("M")
+    return df
+
+
+def _build_active_users_timeline(
+    users_by_period: dict[object, set], registration_map: dict
+) -> list[dict]:
+    """Build active users timeline with new vs returning breakdown."""
+    periods = sorted(users_by_period.keys())
+    timeline = []
+    for period in periods:
+        active = users_by_period[period]
+        new_users = {uid for uid in active if registration_map.get(uid) == period}
+        timeline.append(
+            {
+                "period": str(period),
+                "activeUsers": len(active),
+                "newUsers": len(new_users),
+                "returningUsers": len(active - new_users),
+            }
+        )
+    return timeline
+
+
+def _calculate_regular_users(
+    df: pd.DataFrame, min_active_months: int, months_lookback: int
+) -> dict:
+    """Calculate how many users meet the regular activity threshold."""
+    user_month_counts = (
+        df.groupby("user_id")["period"].nunique().reset_index(name="active_months")
+    )
+    regular_count = int((user_month_counts["active_months"] >= min_active_months).sum())
+    total = len(user_month_counts)
+
+    return {
+        "count": regular_count,
+        "totalUsers": total,
+        "percentage": round((regular_count / total) * 100, 1) if total > 0 else 0.0,
+        "minActiveMonths": min_active_months,
+        "monthsAnalyzed": months_lookback,
+    }
+
+
+def _calculate_retention(users_by_period: dict[object, set]) -> list[dict]:
+    """Calculate month-over-month retention rates."""
+    periods = sorted(users_by_period.keys())
+    retention = []
+    for i in range(1, len(periods)):
+        prev_users = users_by_period[periods[i - 1]]
+        curr_users = users_by_period[periods[i]]
+        retained = prev_users & curr_users
+        retention.append(
+            {
+                "period": str(periods[i]),
+                "retainedFromPrevious": len(retained),
+                "previousTotal": len(prev_users),
+                "retentionRate": round((len(retained) / len(prev_users)) * 100, 1)
+                if len(prev_users) > 0
+                else 0.0,
+            }
+        )
+    return retention
+
+
+def _build_activity_distribution(df: pd.DataFrame) -> list[dict]:
+    """Build distribution of how many months each user was active (1, 2, 3+)."""
+    user_month_counts = (
+        df.groupby("user_id")["period"].nunique().reset_index(name="active_months")
+    )
+    distribution_counts = user_month_counts["active_months"].value_counts().sort_index()
+
+    distribution = []
+    bucket_3plus = 0
+    for months_count, user_count in distribution_counts.items():
+        if months_count >= 3:
+            bucket_3plus += int(user_count)
+        else:
+            distribution.append(
+                {"activeMonths": int(months_count), "userCount": int(user_count)}
+            )
+    if bucket_3plus > 0:
+        distribution.append({"activeMonths": "3+", "userCount": bucket_3plus})
+
+    return distribution
+
+
+def get_user_activity_stats(
+    db: Session, months_lookback: int = 6, min_active_months: int = 2
+) -> dict:
+    """Calculate user activity and retention statistics.
+
+    Args:
+        db: Database session
+        months_lookback: Number of months to look back
+        min_active_months: Minimum months active to be considered "regular"
+
+    Returns:
+        dict: Activity statistics with timeline, regular users, retention,
+              and frequency distribution
+    """
+    empty_response = {
+        "activeUsersTimeline": [],
+        "regularUsers": {
+            "count": 0,
+            "totalUsers": 0,
+            "percentage": 0.0,
+            "minActiveMonths": min_active_months,
+            "monthsAnalyzed": months_lookback,
+        },
+        "retention": [],
+        "activityDistribution": [],
+    }
+
+    df = _fetch_activity_data(db, months_lookback)
+    if df.empty:
+        return empty_response
+
+    # Build user sets per period (shared by timeline and retention)
+    periods = sorted(df["period"].unique())
+    users_by_period = {
+        period: set(df[df["period"] == period]["user_id"].unique())
+        for period in periods
+    }
+
+    # Registration dates for new vs returning classification
+    users_query = db.query(User.id, User.created_at)
+    df_users = pd.read_sql(users_query.statement, db.bind)
+    df_users["id"] = df_users["id"].apply(bytes)
+    df_users["created_at"] = pd.to_datetime(df_users["created_at"])
+    df_users["registration_period"] = df_users["created_at"].dt.to_period("M")
+    registration_map = dict(zip(df_users["id"], df_users["registration_period"]))
+
+    return {
+        "activeUsersTimeline": _build_active_users_timeline(
+            users_by_period, registration_map
+        ),
+        "regularUsers": _calculate_regular_users(
+            df, min_active_months, months_lookback
+        ),
+        "retention": _calculate_retention(users_by_period),
+        "activityDistribution": _build_activity_distribution(df),
     }

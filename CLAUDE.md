@@ -108,6 +108,7 @@ All endpoints are prefixed with `/api/v1/statistics`:
 - `GET /grid/{grid_id}/leaderboard?limit=100` - Top players ranked by score and time
 - `GET /grid/{grid_id}/distribution` - Score distribution bins for histogram visualization
 - `GET /grid/{grid_id}/temporal` - Temporal analysis (submissions by hour/day, peak times, daily timeline)
+- `GET /users/activity?months_lookback=6&min_active_months=2` - Active/regular users, retention, activity distribution
 - `GET /global` - Platform-wide statistics (total users, grids, submissions)
 
 **Documentation available at:**
