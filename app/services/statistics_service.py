@@ -945,6 +945,7 @@ def get_user_activity_stats(
             "minActiveMonths": min_active_months,
             "monthsAnalyzed": months_lookback,
         },
+        "totalPlayedUsers": 0,
         "retention": [],
         "activityDistribution": [],
     }
@@ -968,6 +969,12 @@ def get_user_activity_stats(
     df_users["registration_period"] = df_users["created_at"].dt.to_period("M")
     registration_map = dict(zip(df_users["id"], df_users["registration_period"]))
 
+    # Total users who have played at least one grid (all time)
+    all_user_ids = db.query(Submission.user_id).union(
+        db.query(Progression.user_id)
+    ).subquery()
+    total_played_users = db.query(func.count()).select_from(all_user_ids).scalar()
+
     return {
         "activeUsersTimeline": _build_active_users_timeline(
             users_by_period, registration_map
@@ -975,6 +982,7 @@ def get_user_activity_stats(
         "regularUsers": _calculate_regular_users(
             df, min_active_months, months_lookback
         ),
+        "totalPlayedUsers": total_played_users,
         "retention": _calculate_retention(users_by_period),
         "activityDistribution": _build_activity_distribution(df),
     }
