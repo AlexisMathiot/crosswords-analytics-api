@@ -2,6 +2,7 @@
 
 import re
 from functools import cached_property
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,9 +25,17 @@ class Settings(BaseSettings):
 
     @field_validator("database_url")
     @classmethod
-    def force_psycopg_driver(cls, v: str) -> str:
-        """Accept Symfony-style postgresql:// URLs; only psycopg v3 is installed."""
-        return re.sub(r"^postgres(ql)?://", "postgresql+psycopg://", v)
+    def normalize_database_url(cls, v: str) -> str:
+        """Accept Symfony/Doctrine-style URLs: force the psycopg v3 driver and
+        drop Doctrine-only query params (serverVersion, charset) that psycopg rejects."""
+        v = re.sub(r"^postgres(ql)?://", "postgresql+psycopg://", v)
+        parts = urlsplit(v)
+        query = [
+            (key, value)
+            for key, value in parse_qsl(parts.query)
+            if key.lower() not in {"serverversion", "charset"}
+        ]
+        return urlunsplit(parts._replace(query=urlencode(query)))
 
     # Redis
     redis_host: str = "localhost"
