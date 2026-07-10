@@ -8,10 +8,12 @@ L'app analytics tourne en Docker sur le VPS, à côté de la stack prod de
 
 ## Première installation
 
+Convention VPS : `/opt/onsengrilleune/<env>/...` (comme crosswords-api).
+
 ```bash
-# 1. Cloner le repo sur le VPS (à côté de crosswords-api)
-git clone <repo> crosswords-analytics-api
-cd crosswords-analytics-api
+# 1. Cloner le repo sur le VPS
+git clone -b main git@github.com:AlexisMathiot/crosswords-analytics-api.git /opt/onsengrilleune/prod/crosswords-analytics-api
+cd /opt/onsengrilleune/prod/crosswords-analytics-api
 
 # 2. Créer .env.local (gitignoré) avec la vraie config
 cat > .env.local <<'EOF'
