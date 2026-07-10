@@ -54,7 +54,7 @@ docker exec caddy caddy reload --config /etc/caddy/Caddyfile
 2. Modifier le DNS : `analytics.onsengrilleune.fr` → IP du VPS
 3. Recharger Caddy (certificat émis automatiquement)
 4. Une fois la bascule validée : supprimer l'application Python dans cPanel o2switch
-   (`passenger_wsgi.py` peut alors être retiré du repo)
+   (fait le 10/07/2026 — l'entrypoint legacy `passenger_wsgi.py` a été retiré du repo)
 
 ## Déploiements suivants
 

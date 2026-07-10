@@ -55,8 +55,7 @@ The app runs in Docker on the OVH VPS next to the `crosswords-api` prod stack:
 - `Dockerfile` + `compose.prod.yaml` — the container joins two external Docker networks: `prod_internal` (reaches PostgreSQL at `prod_postgres:5432`; the database is never publicly exposed) and `web` (shared Caddy reverse proxy, serving `analytics.onsengrilleune.fr`)
 - `deploy/deploy-prod.sh` — pull main + rebuild + restart on the VPS
 - `deploy/DEPLOY.md` — first-time setup and DNS cutover from o2switch
-- Real config (DATABASE_URL with prod password, CORS) lives in `.env.local` on the VPS (gitignored)
-- `passenger_wsgi.py` is the legacy o2switch (v1) entrypoint — remove it once the DNS cutover is done
+- Real config (DATABASE_URL with prod password, CORS) lives in `.env.local` on the VPS (gitignored); `app/config.py` normalizes Symfony/Doctrine-style DATABASE_URL (forces `+psycopg`, strips `serverVersion`/`charset`)
 
 ### Key Design Patterns
 

@@ -111,7 +111,6 @@ crosswords-analytics-api/
 │   └── deploy-prod.sh       # Script de déploiement
 ├── Dockerfile
 ├── compose.prod.yaml        # Stack prod (réseaux prod_internal + web)
-├── passenger_wsgi.py        # Legacy o2switch (à supprimer après la bascule)
 ├── requirements.txt         # Dépendances Python
 ├── .env.example             # Template variables d'environnement
 ├── .gitignore
