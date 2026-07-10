@@ -1,7 +1,9 @@
 """Application configuration using Pydantic Settings."""
 
+import re
 from functools import cached_property
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +21,12 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+psycopg://crossword:password@localhost:5432/crossword_db"
     )
+
+    @field_validator("database_url")
+    @classmethod
+    def force_psycopg_driver(cls, v: str) -> str:
+        """Accept Symfony-style postgresql:// URLs; only psycopg v3 is installed."""
+        return re.sub(r"^postgres(ql)?://", "postgresql+psycopg://", v)
 
     # Redis
     redis_host: str = "localhost"
