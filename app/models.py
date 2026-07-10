@@ -1,17 +1,18 @@
-"""SQLAlchemy models matching the existing Symfony database schema (MariaDB)."""
+"""SQLAlchemy models matching the existing Symfony database schema (PostgreSQL, v2)."""
 
 from sqlalchemy import (
-    BINARY,
+    JSON,
     Boolean,
     Column,
     DateTime,
     Float,
     ForeignKey,
     Integer,
+    SmallInteger,
     String,
     Text,
 )
-from sqlalchemy.dialects.mysql import JSON
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -22,10 +23,10 @@ class User(Base):
 
     __tablename__ = "users"
 
-    id = Column(BINARY(16), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True)
     email = Column(String(180), unique=True, nullable=False)
     pseudo = Column(String(24), unique=True, nullable=False)
-    roles = Column(Text, nullable=False)
+    roles = Column(JSON, nullable=False)
     password = Column(String(255), nullable=True)
     is_verified = Column(Boolean, default=False, nullable=False)
     google_id = Column(String(255), unique=True, nullable=True)
@@ -33,6 +34,13 @@ class User(Base):
     created_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime, nullable=False)
     accepted_terms_at = Column(DateTime, nullable=True)
+    cgv_accepted_at = Column(DateTime, nullable=True)
+    stripe_customer_id = Column(String(255), nullable=True)
+    stripe_subscription_id = Column(String(255), nullable=True)
+    subscription_status = Column(String(20), nullable=True)
+    subscription_end_date = Column(DateTime, nullable=True)
+    cancel_at_period_end = Column(Boolean, default=False, nullable=False)
+    launch_promo_used = Column(Boolean, default=False, nullable=False)
 
     # Relationships
     submissions = relationship("Submission", back_populates="user")
@@ -51,9 +59,12 @@ class Grid(Base):
     grid_cols = Column(Integer, nullable=True)
     created_at = Column(DateTime, nullable=True)
     published_at = Column(DateTime, nullable=True)
+    activated_at = Column(DateTime, nullable=True)
+    scheduled_publish_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=False, nullable=False)
     is_archived = Column(Boolean, default=False, nullable=False)
     is_revision = Column(Boolean, default=False, nullable=False)
+    type = Column(String(10), nullable=False)
 
     # Relationships
     submissions = relationship("Submission", back_populates="grid")
@@ -82,16 +93,20 @@ class Word(Base):
 
     id = Column(Integer, primary_key=True)
     clue_id = Column(Integer, ForeignKey("clues.id", ondelete="CASCADE"), nullable=True)
-    display_order = Column(Integer, nullable=True)
+    display_order = Column(SmallInteger, nullable=True)
     clue_text = Column(Text, nullable=True)
     start_position = Column(String(10), nullable=True)
     direction = Column(String(10), nullable=True)
     answer_hash = Column(Text, nullable=True)
     encrypted_answer = Column(Text, nullable=True)
+    alternate_answer_hash = Column(Text, nullable=True)
+    encrypted_alternate_answer = Column(Text, nullable=True)
+    doublette_cell_index = Column(SmallInteger, nullable=True)
     is_long_clue = Column(Boolean, default=False, nullable=False)
     is_subscriber_clue = Column(Boolean, default=False, nullable=False)
-    hyphen_positions = Column(Text, nullable=True)
+    hyphen_positions = Column(JSON, nullable=True)
     is_theme_clue = Column(Boolean, default=False, nullable=False)
+    clue_links = Column(JSON, nullable=True)
 
     # Relationships
     clue = relationship("Clue", back_populates="words")
@@ -102,9 +117,9 @@ class Submission(Base):
 
     __tablename__ = "submission"
 
-    id = Column(BINARY(16), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True)
     user_id = Column(
-        BINARY(16), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     grid_id = Column(Integer, ForeignKey("grids.id", ondelete="CASCADE"), nullable=False)
     correct_cells = Column(Integer, nullable=False)
@@ -128,12 +143,13 @@ class Progression(Base):
 
     __tablename__ = "progression"
 
-    id = Column(BINARY(16), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True)
     user_id = Column(
-        BINARY(16), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     grid_id = Column(Integer, ForeignKey("grids.id", ondelete="CASCADE"), nullable=False)
     cells = Column(JSON, nullable=False)
+    cell_validations = Column(JSON, nullable=True)
     started_at = Column(DateTime, nullable=False)
     last_saved_at = Column(DateTime, nullable=False)
     joker_used = Column(Boolean, default=False, nullable=False)

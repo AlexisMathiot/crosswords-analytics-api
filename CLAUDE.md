@@ -4,49 +4,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a FastAPI-based analytics API for a crosswords application. It provides high-performance statistical calculations using Pandas/NumPy on data from a PostgreSQL database shared with a Symfony API. The service is read-only and does not modify the database schema.
+This is a FastAPI-based analytics API for a crosswords application (onsengrilleune.fr). It provides high-performance statistical calculations using Pandas/NumPy on data from the PostgreSQL database shared with the Symfony API v2 (`~/Projects/crosswords-api`). The service is read-only and does not modify the database schema.
 
 ## Development Commands
 
 ### Environment Setup
 
-This project uses **Devbox** for reproducible development environments:
-
-```bash
-# Enter development environment (installs Python 3.14, PostgreSQL 18.1, Redis 8.2.2)
-devbox shell
-
-# Run development server with auto-reload
-devbox run dev
-# or manually: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-**Without Devbox:**
 ```bash
 source .venv/bin/activate
+pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
+
+The local database is the PostgreSQL container from the `crosswords-api` dev stack (`localhost:5432`, `crossword`/`password`, db `crossword_db`). Start it with `docker compose up -d postgres` in `~/Projects/crosswords-api`.
 
 ### Testing and Code Quality
 
 ```bash
-# Run tests
-devbox run test
-# or: pytest -v
-
-# Lint code with Ruff
-devbox run lint
-# or: ruff check .
-
-# Format code with Ruff
-devbox run format
-# or: ruff format .
+pytest -v        # Run tests
+ruff check .     # Lint
+ruff format .    # Format
 ```
 
 ### Configuration
 
 - Copy `.env.example` to `.env` and configure environment variables
-- Database connection defaults to `postgresql://crossword:crosswords_password@localhost:5432/crossword_db`
+- Database connection defaults to `postgresql+psycopg://crossword:password@localhost:5432/crossword_db`
 - Redis cache TTL defaults to 600 seconds (10 minutes)
 
 ## Architecture
@@ -58,17 +41,28 @@ app/
 ├── main.py                   # FastAPI app initialization, CORS, health check
 ├── config.py                 # Pydantic Settings for environment variables
 ├── database.py               # SQLAlchemy engine, session management, connection pooling
-├── models.py                 # SQLAlchemy ORM models (read-only, maps to Symfony schema)
+├── models.py                 # SQLAlchemy ORM models (read-only, maps to Symfony v2 Postgres schema)
 ├── routers/
 │   └── statistics.py         # API endpoints for statistics
 └── services/
     └── statistics_service.py # Core analytics logic using Pandas/NumPy
 ```
 
+### Deployment (VPS OVH)
+
+The app runs in Docker on the OVH VPS next to the `crosswords-api` prod stack:
+
+- `Dockerfile` + `compose.prod.yaml` — the container joins two external Docker networks: `prod_internal` (reaches PostgreSQL at `prod_postgres:5432`; the database is never publicly exposed) and `web` (shared Caddy reverse proxy, serving `analytics.onsengrilleune.fr`)
+- `deploy/deploy-prod.sh` — pull main + rebuild + restart on the VPS
+- `deploy/DEPLOY.md` — first-time setup and DNS cutover from o2switch
+- Real config (DATABASE_URL with prod password, CORS) lives in `.env.local` on the VPS (gitignored)
+- `passenger_wsgi.py` is the legacy o2switch (v1) entrypoint — remove it once the DNS cutover is done
+
 ### Key Design Patterns
 
 **Database Layer:**
-- SQLAlchemy models map to existing Symfony database tables (no migrations needed)
+- SQLAlchemy models map to the existing Symfony v2 PostgreSQL tables (no migrations here — Doctrine owns the schema)
+- UUIDs use `sqlalchemy.dialects.postgresql.UUID(as_uuid=True)`; JSON columns use generic `sqlalchemy.JSON`
 - Connection pooling configured: `pool_size=10`, `max_overflow=20`, `pool_pre_ping=True`
 - Dependency injection via `get_db()` for database sessions
 - Read-only access - this service never modifies data
@@ -76,6 +70,7 @@ app/
 **Service Layer (app/services/statistics_service.py):**
 - All statistical calculations use **Pandas DataFrames** for vectorized operations (10-50x faster than Python loops)
 - Pattern: Query SQLAlchemy → Convert to DataFrame with `pd.read_sql()` → Perform Pandas/NumPy calculations → Return serializable dict
+- UUID columns coming back from `pd.read_sql()` are `uuid.UUID` objects — normalize with `.astype(str)` before joining/grouping across DataFrames
 - Functions raise `ValueError` for missing resources (caught in routers as 404 errors)
 
 **Router Layer (app/routers/statistics.py):**
@@ -85,14 +80,16 @@ app/
 
 ### Database Schema Reference
 
-The API reads from these tables (managed by Symfony):
+The API reads from these tables (managed by Symfony v2 / Doctrine migrations):
 
-- `users` - User accounts (UUID primary key, pseudo, email, roles)
-- `grids` - Crossword grids (integer ID, version, dimensions, publication status)
+- `users` - User accounts (UUID primary key, pseudo, email, roles JSON, Stripe subscription fields)
+- `grids` - Crossword grids (integer ID, version, dimensions, publication status, `type`, `activated_at`)
 - `submission` - Completed submissions (UUID, user_id, grid_id, scores, times, joker usage)
-- `progression` - In-progress games (UUID, user_id, grid_id, cells JSON, timestamps)
+- `progression` - In-progress games (UUID, user_id, grid_id, cells JSON, cell_validations, timestamps)
 - `clues` - Grid clues (position references)
-- `words` - Individual words in clues (encrypted answers, positions, directions)
+- `words` - Individual words in clues (encrypted answers, positions, directions, alternate answers)
+
+The v2 schema also has duel tables (`duel_match`, `duel_submission`, `elo_rating`) not yet mapped here — candidates for future statistics.
 
 **Critical relationships:**
 - One submission per user per grid (enforced by Symfony)
@@ -107,7 +104,9 @@ All endpoints are prefixed with `/api/v1/statistics`:
 - `GET /grid/{grid_id}` - Comprehensive grid statistics (scores, timing, completion rate, joker usage)
 - `GET /grid/{grid_id}/leaderboard?limit=100` - Top players ranked by score and time
 - `GET /grid/{grid_id}/distribution` - Score distribution bins for histogram visualization
+- `GET /grid/{grid_id}/completion-time-distribution?max_minutes=60` - Completion time histogram
 - `GET /grid/{grid_id}/temporal` - Temporal analysis (submissions by hour/day, peak times, daily timeline)
+- `GET /users/registrations?granularity=month` - New user registrations per week/month
 - `GET /users/activity?months_lookback=6&min_active_months=2` - Active/regular users, retention, activity distribution
 - `GET /global` - Platform-wide statistics (total users, grids, submissions)
 
@@ -130,16 +129,12 @@ All endpoints are prefixed with `/api/v1/statistics`:
 
 ## Common Issues and Solutions
 
-**Bug in statistics_service.py:107** - Logic error when filtering joker usage:
-- Line 107 incorrectly uses `df[df["joker_used"]]` for `without_joker`
-- Should be `df[~df["joker_used"]]` (note the `~` for negation)
-- This causes incorrect `averageScoreWithoutJoker` calculations
-
 **When adding new statistics functions:**
 1. Always verify resource exists (grid/user) and raise `ValueError` if not found
 2. Handle empty DataFrames (return appropriate empty response)
 3. Use `.to_dict()` or explicit type conversions (float, int) for JSON serialization
 4. Handle NaN values from Pandas (check with `math.isnan()` before serializing)
+5. Convert UUID columns to `str` before using them as dict keys or set members shared across queries
 
 **Database queries:**
 - Always filter by grid_id/user_id to avoid full table scans

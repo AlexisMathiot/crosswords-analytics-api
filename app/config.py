@@ -15,9 +15,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Database (MariaDB)
+    # Database (PostgreSQL, shared with crosswords-api v2)
     database_url: str = (
-        "mysql+pymysql://crossword:crosswords_password@localhost:3306/crossword_db"
+        "postgresql+psycopg://crossword:password@localhost:5432/crossword_db"
     )
 
     # Redis
@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # CORS (comma-separated string)
-    cors_origins_str: str = "http://localhost,http://localhost:80,http://localhost:3000,http://localhost:5173,http://localhost:8000,https://crosswords-mvp-analytics.vercel.app,https://crosswords-analytics-front.vercel.app"
+    cors_origins_str: str = "http://localhost,http://localhost:80,http://localhost:3000,http://localhost:5173,http://localhost:8000,https://crosswords-mvp-analytics.vercel.app,https://crosswords-analytics-front.vercel.app,https://onsengrilleune.fr,https://www.onsengrilleune.fr"
 
     @cached_property
     def cors_origins(self) -> list[str]:

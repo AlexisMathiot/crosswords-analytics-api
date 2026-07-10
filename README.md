@@ -1,25 +1,31 @@
 # Crosswords Analytics API
 
-Service d'analyse et de statistiques pour l'application Crosswords, construit avec FastAPI et optimisé pour les calculs statistiques avec Pandas/NumPy.
+Service d'analyse et de statistiques pour l'application Crosswords (onsengrilleune.fr), construit avec FastAPI et optimisé pour les calculs statistiques avec Pandas/NumPy.
 
 ## Stack Technique
 
-- **Python 3.14.0** - Dernière version stable
+- **Python 3.13** - Image Docker `python:3.13-slim`
 - **FastAPI 0.122.0** - Framework web moderne et rapide
-- **PostgreSQL 18.1** - Base de données (partagée avec l'API Symfony)
-- **Redis 8.2.2** - Cache pour optimiser les performances
+- **PostgreSQL 18** - Base de données v2 (partagée avec l'API Symfony, VPS OVH)
+- **psycopg 3** - Driver PostgreSQL
+- **Redis 8** - Cache pour optimiser les performances (roadmap)
 - **Pandas 2.3.3** - Analyse de données haute performance
 - **NumPy 2.2.2** - Calculs numériques optimisés
 - **SQLAlchemy 2.0.40** - ORM Python
-- **Devbox** - Environnement de développement reproductible
+- **Docker Compose** - Déploiement sur le VPS OVH, derrière le Caddy partagé
 
 ## Fonctionnalités
 
 ### Endpoints Statistiques
 
+- `GET /api/v1/statistics/grids` - Liste des grilles disponibles
 - `GET /api/v1/statistics/grid/{grid_id}` - Statistiques complètes d'une grille
 - `GET /api/v1/statistics/grid/{grid_id}/leaderboard` - Classement des joueurs
 - `GET /api/v1/statistics/grid/{grid_id}/distribution` - Distribution des scores (histogramme)
+- `GET /api/v1/statistics/grid/{grid_id}/completion-time-distribution` - Distribution des temps
+- `GET /api/v1/statistics/grid/{grid_id}/temporal` - Analyse temporelle des soumissions
+- `GET /api/v1/statistics/users/registrations` - Inscriptions par semaine/mois
+- `GET /api/v1/statistics/users/activity` - Activité, rétention et utilisateurs réguliers
 - `GET /api/v1/statistics/global` - Statistiques globales de la plateforme
 
 ### Métriques Calculées
@@ -38,54 +44,23 @@ Service d'analyse et de statistiques pour l'application Crosswords, construit av
 - Nombre total de soumissions
 - Moyenne de soumissions par grille
 
-## Installation
-
-### Avec Devbox (Recommandé)
-
-1. **Installer Devbox** (si pas déjà fait) :
-```bash
-curl -fsSL https://get.jetify.com/devbox | bash
-```
-
-2. **Cloner et initialiser le projet** :
-```bash
-cd /home/alexis/Projects/crosswords-analytics-api
-devbox shell
-```
-
-Devbox va automatiquement :
-- Installer Python 3.14.0, PostgreSQL 18.1, Redis 8.2.2
-- Mettre à jour pip
-- Installer toutes les dépendances Python
-
-3. **Configurer les variables d'environnement** :
-```bash
-cp .env.example .env
-# Éditer .env avec vos configurations
-```
-
-### Sans Devbox (Virtual Environment)
+## Installation (développement)
 
 ```bash
-python3.14 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
+
+cp .env.example .env
+# Éditer .env — en local, pointer sur le Postgres de la stack Docker crosswords-api :
+# DATABASE_URL=postgresql+psycopg://crossword:password@localhost:5432/crossword_db
 ```
 
 ## Utilisation
 
 ### Démarrer le serveur
 
-**Avec Devbox :**
-```bash
-devbox run dev
-# ou
-devbox shell
-uvicorn app.main:app --reload
-```
-
-**Sans Devbox :**
 ```bash
 source .venv/bin/activate
 uvicorn app.main:app --reload
@@ -124,16 +99,21 @@ crosswords-analytics-api/
 │   ├── main.py              # Application FastAPI principale
 │   ├── config.py            # Configuration (Pydantic Settings)
 │   ├── database.py          # Connexion SQLAlchemy
-│   ├── models.py            # Modèles SQLAlchemy
+│   ├── models.py            # Modèles SQLAlchemy (schéma Postgres v2)
 │   ├── routers/
 │   │   ├── __init__.py
 │   │   └── statistics.py    # Routes statistiques
 │   └── services/
 │       ├── __init__.py
 │       └── statistics_service.py  # Calculs avec Pandas/NumPy
-├── devbox.json              # Configuration Devbox
+├── deploy/
+│   ├── DEPLOY.md            # Guide de déploiement VPS
+│   └── deploy-prod.sh       # Script de déploiement
+├── Dockerfile
+├── compose.prod.yaml        # Stack prod (réseaux prod_internal + web)
+├── passenger_wsgi.py        # Legacy o2switch (à supprimer après la bascule)
 ├── requirements.txt         # Dépendances Python
-├── .env.example            # Template variables d'environnement
+├── .env.example             # Template variables d'environnement
 ├── .gitignore
 └── README.md
 ```
@@ -144,57 +124,60 @@ crosswords-analytics-api/
 
 Voir `.env.example` pour la liste complète. Les principales :
 
-- `DATABASE_URL` - URL de connexion PostgreSQL
+- `DATABASE_URL` - URL de connexion PostgreSQL (`postgresql+psycopg://...`)
 - `REDIS_HOST`, `REDIS_PORT` - Configuration Redis
 - `REDIS_TTL` - Durée de cache (secondes)
-- `CORS_ORIGINS` - Origines autorisées pour CORS
+- `CORS_ORIGINS_STR` - Origines autorisées pour CORS (séparées par des virgules)
 - `DEBUG` - Mode debug (true/false)
 
 ### Base de Données
 
-L'API se connecte à la même base de données PostgreSQL que l'API Symfony (`crosswords_db`).
+L'API se connecte à la même base PostgreSQL que l'API Symfony v2 (`crossword_db`).
 
 Les modèles SQLAlchemy mappent les tables existantes :
-- `user` - Utilisateurs
-- `grid` - Grilles
+- `users` - Utilisateurs (UUID)
+- `grids` - Grilles
 - `submission` - Soumissions
 - `progression` - Progressions
-- `clue` - Indices
-- `word` - Mots
+- `clues` - Indices
+- `words` - Mots
 
-**Aucune migration nécessaire** - lecture seule sur la base existante.
+**Aucune migration nécessaire** - lecture seule sur la base existante (les migrations sont gérées par Doctrine côté Symfony).
+
+## Déploiement
+
+L'app est déployée en Docker sur le VPS OVH, à côté de la stack `crosswords-api` :
+elle rejoint le réseau `prod_internal` pour atteindre `prod_postgres:5432` et le
+réseau `web` pour être exposée par Caddy sur `analytics.onsengrilleune.fr`.
+
+Voir **[deploy/DEPLOY.md](deploy/DEPLOY.md)** pour la première installation et la
+bascule DNS depuis o2switch. Ensuite :
+
+```bash
+./deploy/deploy-prod.sh   # pull main + rebuild + restart
+```
 
 ## Développement
 
 ### Tests
 
 ```bash
-devbox run test
-# ou
 pytest -v
 ```
 
 ### Linting et Formatage
 
 ```bash
-devbox run lint    # Vérifier le code avec Ruff
-devbox run format  # Formater le code avec Ruff
+ruff check .    # Vérifier le code
+ruff format .   # Formater le code
 ```
-
-### Scripts Devbox
-
-Définis dans `devbox.json` :
-- `devbox run dev` - Démarrer en mode développement
-- `devbox run test` - Lancer les tests
-- `devbox run lint` - Linter le code
-- `devbox run format` - Formater le code
 
 ## Performance
 
 ### Optimisations
 
 1. **Pandas/NumPy** - Calculs vectorisés 10-50x plus rapides que Python pur
-2. **Cache Redis** - TTL de 10 minutes par défaut pour les statistiques
+2. **Cache Redis** - TTL de 10 minutes par défaut pour les statistiques (roadmap)
 3. **Connection Pooling** - SQLAlchemy pool (10 connexions + 20 overflow)
 4. **Async FastAPI** - Endpoints asynchrones pour meilleure concurrence
 
@@ -210,7 +193,7 @@ Définis dans `devbox.json` :
 
 ```typescript
 // Exemple d'utilisation
-const response = await fetch('http://localhost:8000/api/v1/statistics/grid/10');
+const response = await fetch('https://analytics.onsengrilleune.fr/api/v1/statistics/grid/10');
 const stats = await response.json();
 
 console.log(stats.totalPlayers);      // 2351
@@ -226,7 +209,7 @@ L'API Symfony peut appeler ce service pour obtenir des statistiques sans surchar
 
 - [ ] Tests unitaires et d'intégration
 - [ ] Cache Redis implémenté
-- [ ] Analyse temporelle (soumissions par heure/jour)
+- [ ] Statistiques duels / ELO (nouvelles tables v2)
 - [ ] Analyse de mots (taux de succès par mot)
 - [ ] Heatmap de difficulté
 - [ ] Métriques comportementales avancées
@@ -236,7 +219,7 @@ L'API Symfony peut appeler ce service pour obtenir des statistiques sans surchar
 
 ## Licence
 
-Propriétaire - Crosswords V1
+Propriétaire - Crosswords
 
 ## Contact
 

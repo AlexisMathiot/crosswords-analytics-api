@@ -834,7 +834,8 @@ def _fetch_activity_data(db: Session, months_lookback: int) -> pd.DataFrame:
     if df.empty:
         return df
 
-    df["user_id"] = df["user_id"].apply(bytes)
+    # Normalize UUIDs to strings so they can be matched against users.id
+    df["user_id"] = df["user_id"].astype(str)
     df["activity_date"] = pd.to_datetime(df["activity_date"])
     df["period"] = df["activity_date"].dt.to_period("M")
     return df
@@ -964,7 +965,7 @@ def get_user_activity_stats(
     # Registration dates for new vs returning classification
     users_query = db.query(User.id, User.created_at)
     df_users = pd.read_sql(users_query.statement, db.bind)
-    df_users["id"] = df_users["id"].apply(bytes)
+    df_users["id"] = df_users["id"].astype(str)
     df_users["created_at"] = pd.to_datetime(df_users["created_at"])
     df_users["registration_period"] = df_users["created_at"].dt.to_period("M")
     registration_map = dict(zip(df_users["id"], df_users["registration_period"]))

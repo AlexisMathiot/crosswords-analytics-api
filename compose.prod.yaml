@@ -1,0 +1,45 @@
+# Stack PROD analytics — VPS. Reverse-proxyée par le Caddy partagé (réseau "web").
+#
+# Rejoint le réseau interne de la stack prod de crosswords-api ("prod_internal")
+# pour atteindre Postgres via prod_postgres:5432 — la base n'est jamais exposée.
+# Même modèle opérationnel que crosswords-api : git pull + deploy/deploy-prod.sh
+#
+# Première installation : voir deploy/DEPLOY.md
+name: analytics
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: crosswords-analytics-api
+    container_name: prod_analytics
+    restart: unless-stopped
+    env_file:
+      # .env est gitignoré : sur le VPS, .env.local porte toute la config (DATABASE_URL, CORS…)
+      - path: .env
+        required: false
+      - path: .env.local
+        required: true
+    ports:
+      - "127.0.0.1:8082:8000"  # debug local (curl/tunnel SSH) ; l'accès public passe par Caddy via "web"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - prod_internal
+      - web
+
+networks:
+  prod_internal:
+    external: true  # réseau interne de la stack prod crosswords-api (name: prod + network: internal)
+  web:
+    external: true  # créé par la stack Caddy (docker network create web)
