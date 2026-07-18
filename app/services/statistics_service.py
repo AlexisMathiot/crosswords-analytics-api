@@ -183,7 +183,7 @@ def calculate_grid_stats(db: Session, grid_id: int) -> dict:
     )
 
     # Convert to pandas DataFrame for fast analysis
-    df = pd.read_sql(submissions_query.statement, db.bind)
+    df = pd.read_sql(submissions_query.statement, db.connection())
 
     if df.empty:
         return {
@@ -317,7 +317,7 @@ def get_leaderboard(db: Session, grid_id: int, limit: int = 100) -> list[dict]:
         .limit(limit)
     )
 
-    df = pd.read_sql(query.statement, db.bind)
+    df = pd.read_sql(query.statement, db.connection())
 
     if df.empty:
         return []
@@ -503,7 +503,7 @@ def calculate_temporal_stats(db: Session, grid_id: int) -> dict:
     )
 
     # Convert to pandas DataFrame
-    df = pd.read_sql(submissions_query.statement, db.bind)
+    df = pd.read_sql(submissions_query.statement, db.connection())
 
     if df.empty:
         return {
@@ -547,9 +547,10 @@ def calculate_temporal_stats(db: Session, grid_id: int) -> dict:
     ]
 
     # Find peak submission hours (top 3)
-    peak_hours = df["hour"].value_counts().head(3).to_dict()
+    peak_hours = df["hour"].value_counts().head(3)
     peak_hours_list = [
-        {"hour": int(hour), "count": int(count)} for hour, count in peak_hours.items()
+        {"hour": int(hour), "count": int(count)}
+        for hour, count in zip(peak_hours.index.tolist(), peak_hours.tolist())
     ]
 
     # Daily submissions timeline
@@ -597,7 +598,7 @@ def get_new_users_per_period(db: Session, granularity: str = "month") -> list[di
         list: User registration counts per period, sorted chronologically
     """
     query = db.query(User.created_at)
-    df = pd.read_sql(query.statement, db.bind)
+    df = pd.read_sql(query.statement, db.connection())
 
     if df.empty:
         return []
@@ -719,7 +720,7 @@ def calculate_global_stats(
         )
 
     # Convert to DataFrame for analysis
-    df = pd.read_sql(grids_query.statement, db.bind)
+    df = pd.read_sql(grids_query.statement, db.connection())
 
     grids_stats = []
     if not df.empty and "grid_id" in df.columns:
@@ -838,14 +839,14 @@ def _fetch_activity_data(db: Session, months_lookback: int) -> pd.DataFrame:
         Submission.submitted_at.label("activity_date"),
     ).filter(Submission.submitted_at >= cutoff)
 
-    df = pd.read_sql(submissions_query.statement, db.bind)
+    df = pd.read_sql(submissions_query.statement, db.connection())
 
     try:
         progressions_query = db.query(
             Progression.user_id,
             Progression.last_saved_at.label("activity_date"),
         ).filter(Progression.last_saved_at >= cutoff)
-        df_prog = pd.read_sql(progressions_query.statement, db.bind)
+        df_prog = pd.read_sql(progressions_query.statement, db.connection())
         df = pd.concat([df, df_prog], ignore_index=True)
     except Exception:
         pass  # progression table may not exist yet
@@ -861,7 +862,7 @@ def _fetch_activity_data(db: Session, months_lookback: int) -> pd.DataFrame:
 
 
 def _build_active_users_timeline(
-    users_by_period: dict[object, set], registration_map: dict
+    users_by_period: dict[pd.Period, set], registration_map: dict
 ) -> list[dict]:
     """Build active users timeline with new vs returning breakdown."""
     periods = sorted(users_by_period.keys())
@@ -899,7 +900,7 @@ def _calculate_regular_users(
     }
 
 
-def _calculate_retention(users_by_period: dict[object, set]) -> list[dict]:
+def _calculate_retention(users_by_period: dict[pd.Period, set]) -> list[dict]:
     """Calculate month-over-month retention rates."""
     periods = sorted(users_by_period.keys())
     retention = []
@@ -929,7 +930,9 @@ def _build_activity_distribution(df: pd.DataFrame) -> list[dict]:
 
     distribution = []
     bucket_3plus = 0
-    for months_count, user_count in distribution_counts.items():
+    for months_count, user_count in zip(
+        distribution_counts.index.tolist(), distribution_counts.tolist()
+    ):
         if months_count >= 3:
             bucket_3plus += int(user_count)
         else:
@@ -983,7 +986,7 @@ def get_user_activity_stats(
 
     # Registration dates for new vs returning classification
     users_query = db.query(User.id, User.created_at)
-    df_users = pd.read_sql(users_query.statement, db.bind)
+    df_users = pd.read_sql(users_query.statement, db.connection())
     df_users["id"] = df_users["id"].astype(str)
     df_users["created_at"] = pd.to_datetime(df_users["created_at"])
     df_users["registration_period"] = df_users["created_at"].dt.to_period("M")
@@ -1053,7 +1056,7 @@ def calculate_type_stats(db: Session) -> dict:
         Submission.total_words,
         Submission.joker_used,
     ).join(Grid, Submission.grid_id == Grid.id)
-    df_sub = pd.read_sql(submissions_query.statement, db.bind)
+    df_sub = pd.read_sql(submissions_query.statement, db.connection())
     if not df_sub.empty:
         df_sub["user_id"] = df_sub["user_id"].astype(str)
 
@@ -1065,7 +1068,7 @@ def calculate_type_stats(db: Session) -> dict:
         DuelSubmission.words_found,
         DuelSubmission.total_words,
     )
-    df_duel = pd.read_sql(duel_query.statement, db.bind)
+    df_duel = pd.read_sql(duel_query.statement, db.connection())
     total_matches = db.query(func.count(DuelMatch.id)).scalar()
 
     types = []

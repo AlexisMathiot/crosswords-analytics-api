@@ -85,7 +85,7 @@ def get_premium_stats(db: Session) -> dict:
         User.launch_promo_used,
         User.cgv_accepted_at,
     )
-    df = pd.read_sql(users_query.statement, db.bind)
+    df = pd.read_sql(users_query.statement, db.connection())
 
     by_status = {status: 0 for status in SUBSCRIPTION_STATUSES}
     by_status["none"] = 0
@@ -104,7 +104,8 @@ def get_premium_stats(db: Session) -> dict:
     if not df.empty:
         status = df["subscription_status"]
         for value, count in status.value_counts(dropna=False).items():
-            if pd.isna(value):
+            # Non-str covers NULL statuses (None/NaN)
+            if not isinstance(value, str):
                 by_status["none"] += int(count)
             elif value in SUBSCRIPTION_STATUSES:
                 by_status[value] = int(count)
@@ -164,7 +165,7 @@ def _build_subscription_timeline(db: Session) -> list[dict]:
             ["checkout.session.completed", "customer.subscription.deleted"]
         )
     )
-    df = pd.read_sql(events_query.statement, db.bind)
+    df = pd.read_sql(events_query.statement, db.connection())
 
     if df.empty:
         return []

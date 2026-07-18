@@ -1,11 +1,12 @@
 """SQLAlchemy models matching the existing Symfony database schema (PostgreSQL, v2)."""
 
+import uuid
+from datetime import datetime
+
 from sqlalchemy import (
     JSON,
     Boolean,
-    Column,
     DateTime,
-    Float,
     ForeignKey,
     Integer,
     SmallInteger,
@@ -13,7 +14,7 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
@@ -23,28 +24,28 @@ class User(Base):
 
     __tablename__ = "users"
 
-    id = Column(UUID(as_uuid=True), primary_key=True)
-    email = Column(String(180), unique=True, nullable=False)
-    pseudo = Column(String(24), unique=True, nullable=False)
-    roles = Column(JSON, nullable=False)
-    password = Column(String(255), nullable=True)
-    is_verified = Column(Boolean, default=False, nullable=False)
-    google_id = Column(String(255), unique=True, nullable=True)
-    auth_provider = Column(String(20), nullable=False)
-    created_at = Column(DateTime, nullable=False)
-    updated_at = Column(DateTime, nullable=False)
-    accepted_terms_at = Column(DateTime, nullable=True)
-    cgv_accepted_at = Column(DateTime, nullable=True)
-    stripe_customer_id = Column(String(255), nullable=True)
-    stripe_subscription_id = Column(String(255), nullable=True)
-    subscription_status = Column(String(20), nullable=True)
-    subscription_end_date = Column(DateTime, nullable=True)
-    cancel_at_period_end = Column(Boolean, default=False, nullable=False)
-    launch_promo_used = Column(Boolean, default=False, nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    email: Mapped[str] = mapped_column(String(180), unique=True)
+    pseudo: Mapped[str] = mapped_column(String(24), unique=True)
+    roles: Mapped[list] = mapped_column(JSON)
+    password: Mapped[str | None] = mapped_column(String(255))
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    google_id: Mapped[str | None] = mapped_column(String(255), unique=True)
+    auth_provider: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+    updated_at: Mapped[datetime] = mapped_column(DateTime)
+    accepted_terms_at: Mapped[datetime | None] = mapped_column(DateTime)
+    cgv_accepted_at: Mapped[datetime | None] = mapped_column(DateTime)
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(255))
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255))
+    subscription_status: Mapped[str | None] = mapped_column(String(20))
+    subscription_end_date: Mapped[datetime | None] = mapped_column(DateTime)
+    cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False)
+    launch_promo_used: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships
-    submissions = relationship("Submission", back_populates="user")
-    progressions = relationship("Progression", back_populates="user")
+    submissions: Mapped[list["Submission"]] = relationship(back_populates="user")
+    progressions: Mapped[list["Progression"]] = relationship(back_populates="user")
 
 
 class Grid(Base):
@@ -52,24 +53,24 @@ class Grid(Base):
 
     __tablename__ = "grids"
 
-    id = Column(Integer, primary_key=True)
-    parent_grid_id = Column(Integer, nullable=True)
-    version = Column(String(255), unique=True, nullable=True)
-    grid_rows = Column(Integer, nullable=True)
-    grid_cols = Column(Integer, nullable=True)
-    created_at = Column(DateTime, nullable=True)
-    published_at = Column(DateTime, nullable=True)
-    activated_at = Column(DateTime, nullable=True)
-    scheduled_publish_at = Column(DateTime, nullable=True)
-    is_active = Column(Boolean, default=False, nullable=False)
-    is_archived = Column(Boolean, default=False, nullable=False)
-    is_revision = Column(Boolean, default=False, nullable=False)
-    type = Column(String(10), nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    parent_grid_id: Mapped[int | None] = mapped_column(Integer)
+    version: Mapped[str | None] = mapped_column(String(255), unique=True)
+    grid_rows: Mapped[int | None] = mapped_column(Integer)
+    grid_cols: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime)
+    scheduled_publish_at: Mapped[datetime | None] = mapped_column(DateTime)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_revision: Mapped[bool] = mapped_column(Boolean, default=False)
+    type: Mapped[str] = mapped_column(String(10))
 
     # Relationships
-    submissions = relationship("Submission", back_populates="grid")
-    progressions = relationship("Progression", back_populates="grid")
-    clues = relationship("Clue", back_populates="grid")
+    submissions: Mapped[list["Submission"]] = relationship(back_populates="grid")
+    progressions: Mapped[list["Progression"]] = relationship(back_populates="grid")
+    clues: Mapped[list["Clue"]] = relationship(back_populates="grid")
 
 
 class Clue(Base):
@@ -77,13 +78,15 @@ class Clue(Base):
 
     __tablename__ = "clues"
 
-    id = Column(Integer, primary_key=True)
-    grid_id = Column(Integer, ForeignKey("grids.id", ondelete="CASCADE"), nullable=True)
-    position = Column(String(10), nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    grid_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("grids.id", ondelete="CASCADE")
+    )
+    position: Mapped[str | None] = mapped_column(String(10))
 
     # Relationships
-    grid = relationship("Grid", back_populates="clues")
-    words = relationship("Word", back_populates="clue")
+    grid: Mapped["Grid | None"] = relationship(back_populates="clues")
+    words: Mapped[list["Word"]] = relationship(back_populates="clue")
 
 
 class Word(Base):
@@ -91,25 +94,27 @@ class Word(Base):
 
     __tablename__ = "words"
 
-    id = Column(Integer, primary_key=True)
-    clue_id = Column(Integer, ForeignKey("clues.id", ondelete="CASCADE"), nullable=True)
-    display_order = Column(SmallInteger, nullable=True)
-    clue_text = Column(Text, nullable=True)
-    start_position = Column(String(10), nullable=True)
-    direction = Column(String(10), nullable=True)
-    answer_hash = Column(Text, nullable=True)
-    encrypted_answer = Column(Text, nullable=True)
-    alternate_answer_hash = Column(Text, nullable=True)
-    encrypted_alternate_answer = Column(Text, nullable=True)
-    doublette_cell_index = Column(SmallInteger, nullable=True)
-    is_long_clue = Column(Boolean, default=False, nullable=False)
-    is_subscriber_clue = Column(Boolean, default=False, nullable=False)
-    hyphen_positions = Column(JSON, nullable=True)
-    is_theme_clue = Column(Boolean, default=False, nullable=False)
-    clue_links = Column(JSON, nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    clue_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("clues.id", ondelete="CASCADE")
+    )
+    display_order: Mapped[int | None] = mapped_column(SmallInteger)
+    clue_text: Mapped[str | None] = mapped_column(Text)
+    start_position: Mapped[str | None] = mapped_column(String(10))
+    direction: Mapped[str | None] = mapped_column(String(10))
+    answer_hash: Mapped[str | None] = mapped_column(Text)
+    encrypted_answer: Mapped[str | None] = mapped_column(Text)
+    alternate_answer_hash: Mapped[str | None] = mapped_column(Text)
+    encrypted_alternate_answer: Mapped[str | None] = mapped_column(Text)
+    doublette_cell_index: Mapped[int | None] = mapped_column(SmallInteger)
+    is_long_clue: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_subscriber_clue: Mapped[bool] = mapped_column(Boolean, default=False)
+    hyphen_positions: Mapped[dict | None] = mapped_column(JSON)
+    is_theme_clue: Mapped[bool] = mapped_column(Boolean, default=False)
+    clue_links: Mapped[dict | None] = mapped_column(JSON)
 
     # Relationships
-    clue = relationship("Clue", back_populates="words")
+    clue: Mapped["Clue | None"] = relationship(back_populates="words")
 
 
 class Submission(Base):
@@ -117,27 +122,27 @@ class Submission(Base):
 
     __tablename__ = "submission"
 
-    id = Column(UUID(as_uuid=True), primary_key=True)
-    user_id = Column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE")
     )
-    grid_id = Column(
-        Integer, ForeignKey("grids.id", ondelete="CASCADE"), nullable=False
+    grid_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("grids.id", ondelete="CASCADE")
     )
-    correct_cells = Column(Integer, nullable=False)
-    base_score = Column(Float, nullable=False)
-    time_bonus = Column(Float, nullable=False)
-    joker_penalty = Column(Float, nullable=False)
-    final_score = Column(Float, nullable=False)
-    completion_time_seconds = Column(Integer, nullable=False)
-    words_found = Column(Integer, nullable=False)
-    total_words = Column(Integer, nullable=False)
-    joker_used = Column(Boolean, default=False, nullable=False)
-    submitted_at = Column(DateTime, nullable=False)
+    correct_cells: Mapped[int] = mapped_column(Integer)
+    base_score: Mapped[float]
+    time_bonus: Mapped[float]
+    joker_penalty: Mapped[float]
+    final_score: Mapped[float]
+    completion_time_seconds: Mapped[int] = mapped_column(Integer)
+    words_found: Mapped[int] = mapped_column(Integer)
+    total_words: Mapped[int] = mapped_column(Integer)
+    joker_used: Mapped[bool] = mapped_column(Boolean, default=False)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime)
 
     # Relationships
-    user = relationship("User", back_populates="submissions")
-    grid = relationship("Grid", back_populates="submissions")
+    user: Mapped["User"] = relationship(back_populates="submissions")
+    grid: Mapped["Grid"] = relationship(back_populates="submissions")
 
 
 class Progression(Base):
@@ -145,23 +150,23 @@ class Progression(Base):
 
     __tablename__ = "progression"
 
-    id = Column(UUID(as_uuid=True), primary_key=True)
-    user_id = Column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE")
     )
-    grid_id = Column(
-        Integer, ForeignKey("grids.id", ondelete="CASCADE"), nullable=False
+    grid_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("grids.id", ondelete="CASCADE")
     )
-    cells = Column(JSON, nullable=False)
-    cell_validations = Column(JSON, nullable=True)
-    started_at = Column(DateTime, nullable=False)
-    last_saved_at = Column(DateTime, nullable=False)
-    joker_used = Column(Boolean, default=False, nullable=False)
-    joker_used_at = Column(DateTime, nullable=True)
+    cells: Mapped[dict] = mapped_column(JSON)
+    cell_validations: Mapped[dict | None] = mapped_column(JSON)
+    started_at: Mapped[datetime] = mapped_column(DateTime)
+    last_saved_at: Mapped[datetime] = mapped_column(DateTime)
+    joker_used: Mapped[bool] = mapped_column(Boolean, default=False)
+    joker_used_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     # Relationships
-    user = relationship("User", back_populates="progressions")
-    grid = relationship("Grid", back_populates="progressions")
+    user: Mapped["User"] = relationship(back_populates="progressions")
+    grid: Mapped["Grid"] = relationship(back_populates="progressions")
 
 
 class DuelMatch(Base):
@@ -169,22 +174,22 @@ class DuelMatch(Base):
 
     __tablename__ = "duel_match"
 
-    id = Column(UUID(as_uuid=True), primary_key=True)
-    grid_id = Column(Integer, ForeignKey("grids.id"), nullable=False)
-    submission1_id = Column(
-        UUID(as_uuid=True), ForeignKey("duel_submission.id"), nullable=False
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    grid_id: Mapped[int] = mapped_column(Integer, ForeignKey("grids.id"))
+    submission1_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("duel_submission.id")
     )
-    submission2_id = Column(
-        UUID(as_uuid=True), ForeignKey("duel_submission.id"), nullable=False
+    submission2_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("duel_submission.id")
     )
-    winner_id = Column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    winner_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
-    winner_pseudo = Column(String(255), nullable=True)
-    outcome = Column(String(20), nullable=False)  # submission1 | submission2 | draw
-    player1_elo_change = Column(Integer, nullable=False)
-    player2_elo_change = Column(Integer, nullable=False)
-    resolved_at = Column(DateTime, nullable=False)
+    winner_pseudo: Mapped[str | None] = mapped_column(String(255))
+    outcome: Mapped[str] = mapped_column(String(20))  # submission1 | submission2 | draw
+    player1_elo_change: Mapped[int] = mapped_column(Integer)
+    player2_elo_change: Mapped[int] = mapped_column(Integer)
+    resolved_at: Mapped[datetime] = mapped_column(DateTime)
 
 
 class DuelSubmission(Base):
@@ -192,26 +197,26 @@ class DuelSubmission(Base):
 
     __tablename__ = "duel_submission"
 
-    id = Column(UUID(as_uuid=True), primary_key=True)
-    user_id = Column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
-    grid_id = Column(
-        Integer, ForeignKey("grids.id", ondelete="CASCADE"), nullable=False
+    grid_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("grids.id", ondelete="CASCADE")
     )
-    answers = Column(JSON, nullable=True)
-    words_found = Column(Integer, nullable=True)
-    total_words = Column(Integer, nullable=True)
-    completion_time = Column(Integer, nullable=True)
-    started_at = Column(DateTime, nullable=False)
-    submitted_at = Column(DateTime, nullable=True)
-    status = Column(
-        String(20), nullable=False
+    answers: Mapped[dict | None] = mapped_column(JSON)
+    words_found: Mapped[int | None] = mapped_column(Integer)
+    total_words: Mapped[int | None] = mapped_column(Integer)
+    completion_time: Mapped[int | None] = mapped_column(Integer)
+    started_at: Mapped[datetime] = mapped_column(DateTime)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime)
+    status: Mapped[str] = mapped_column(
+        String(20)
     )  # in_progress | submitted | matched | expired
-    duel_match_id = Column(
-        UUID(as_uuid=True), ForeignKey("duel_match.id"), nullable=True
+    duel_match_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("duel_match.id")
     )
-    user_pseudo = Column(String(255), nullable=False)
+    user_pseudo: Mapped[str] = mapped_column(String(255))
 
 
 class EloRating(Base):
@@ -219,17 +224,14 @@ class EloRating(Base):
 
     __tablename__ = "elo_rating"
 
-    id = Column(UUID(as_uuid=True), primary_key=True)
-    user_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        unique=True,
-        nullable=False,
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), unique=True
     )
-    rating = Column(Integer, default=1200, nullable=False)
-    duels_played = Column(Integer, default=0, nullable=False)
-    duels_won = Column(Integer, default=0, nullable=False)
-    duels_lost = Column(Integer, default=0, nullable=False)
+    rating: Mapped[int] = mapped_column(Integer, default=1200)
+    duels_played: Mapped[int] = mapped_column(Integer, default=0)
+    duels_won: Mapped[int] = mapped_column(Integer, default=0)
+    duels_lost: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class StripeEventLog(Base):
@@ -237,7 +239,7 @@ class StripeEventLog(Base):
 
     __tablename__ = "stripe_event_log"
 
-    id = Column(UUID(as_uuid=True), primary_key=True)
-    stripe_event_id = Column(String(255), unique=True, nullable=False)
-    event_type = Column(String(100), nullable=False)
-    processed_at = Column(DateTime, nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    stripe_event_id: Mapped[str] = mapped_column(String(255), unique=True)
+    event_type: Mapped[str] = mapped_column(String(100))
+    processed_at: Mapped[datetime] = mapped_column(DateTime)

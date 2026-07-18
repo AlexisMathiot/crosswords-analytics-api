@@ -29,12 +29,12 @@ def get_duel_overview(db: Session) -> dict:
         DuelSubmission.total_words,
         DuelSubmission.started_at,
     )
-    df_sub = pd.read_sql(submissions_query.statement, db.bind)
+    df_sub = pd.read_sql(submissions_query.statement, db.connection())
 
     matches_query = db.query(
         DuelMatch.grid_id, DuelMatch.outcome, DuelMatch.resolved_at
     )
-    df_match = pd.read_sql(matches_query.statement, db.bind)
+    df_match = pd.read_sql(matches_query.statement, db.connection())
 
     overview = {
         "totalDuelSubmissions": int(len(df_sub)),
@@ -261,7 +261,7 @@ def get_elo_leaderboard(
         .limit(limit)
     )
 
-    df = pd.read_sql(query.statement, db.bind)
+    df = pd.read_sql(query.statement, db.connection())
 
     if df.empty:
         return []

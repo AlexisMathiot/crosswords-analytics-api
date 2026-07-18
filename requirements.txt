@@ -3,7 +3,7 @@ fastapi==0.122.0
 uvicorn[standard]==0.38.0
 
 # Base de données
-sqlalchemy==2.0.40
+sqlalchemy==2.0.51
 psycopg[binary]==3.2.13
 
 # Analyse de données
@@ -25,3 +25,4 @@ httpx==0.28.1
 pytest==8.3.4
 pytest-asyncio==0.25.2
 ruff==0.9.1
+pandas-stubs==3.0.3.260530  # dev: typage pandas pour Pyright/Pylance
