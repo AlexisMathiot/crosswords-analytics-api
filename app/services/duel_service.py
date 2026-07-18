@@ -123,8 +123,8 @@ def _build_per_grid_stats(
     if not duel_grids:
         return []
 
-    matches_per_grid = (
-        df_match.groupby("grid_id").size() if not df_match.empty else pd.Series()
+    matches_per_grid: dict = (
+        df_match.groupby("grid_id").size().to_dict() if not df_match.empty else {}
     )
 
     per_grid = []
