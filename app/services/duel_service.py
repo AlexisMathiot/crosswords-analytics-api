@@ -4,7 +4,8 @@ import pandas as pd
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import DuelMatch, DuelSubmission, EloRating, User
+from app.models import DuelMatch, DuelSubmission, EloRating, Grid, User
+from app.services.statistics_service import extract_grid_number
 
 # Mirror of EloRating::LEADERBOARD_ELIGIBILITY_THRESHOLD in the Symfony API
 ELO_LEADERBOARD_MIN_DUELS = 5
@@ -21,6 +22,7 @@ def get_duel_overview(db: Session) -> dict:
     """
     submissions_query = db.query(
         DuelSubmission.user_id,
+        DuelSubmission.grid_id,
         DuelSubmission.status,
         DuelSubmission.completion_time,
         DuelSubmission.words_found,
@@ -29,7 +31,9 @@ def get_duel_overview(db: Session) -> dict:
     )
     df_sub = pd.read_sql(submissions_query.statement, db.bind)
 
-    matches_query = db.query(DuelMatch.outcome, DuelMatch.resolved_at)
+    matches_query = db.query(
+        DuelMatch.grid_id, DuelMatch.outcome, DuelMatch.resolved_at
+    )
     df_match = pd.read_sql(matches_query.statement, db.bind)
 
     overview = {
@@ -53,6 +57,7 @@ def get_duel_overview(db: Session) -> dict:
         "averageWordsFound": None,
         "averageCompletion": None,
         "participationTimeline": [],
+        "perGrid": [],
         "elo": _get_elo_summary(db),
     }
 
@@ -101,8 +106,67 @@ def get_duel_overview(db: Session) -> dict:
         }
 
     overview["participationTimeline"] = _build_participation_timeline(df_sub, df_match)
+    overview["perGrid"] = _build_per_grid_stats(db, df_sub, df_match)
 
     return overview
+
+
+def _build_per_grid_stats(
+    db: Session, df_sub: pd.DataFrame, df_match: pd.DataFrame
+) -> list[dict]:
+    """Build per-duel-grid statistics (published grids only), most recent first."""
+    duel_grids = (
+        db.query(Grid.id, Grid.version, Grid.activated_at, Grid.published_at)
+        .filter(Grid.type == "duel", Grid.published_at.isnot(None))
+        .all()
+    )
+    if not duel_grids:
+        return []
+
+    matches_per_grid = (
+        df_match.groupby("grid_id").size() if not df_match.empty else pd.Series()
+    )
+
+    per_grid = []
+    for grid in duel_grids:
+        stats = {
+            "gridId": grid.id,
+            "gridNumber": extract_grid_number(grid.version),
+            "version": grid.version,
+            "submissions": 0,
+            "matches": int(matches_per_grid.get(grid.id, 0)),
+            "uniquePlayers": 0,
+            "expiredCount": 0,
+            "medianCompletionTime": None,
+            "completionRate": None,
+        }
+
+        if not df_sub.empty:
+            grid_subs = df_sub[df_sub["grid_id"] == grid.id]
+            played = grid_subs[grid_subs["status"].isin(["submitted", "matched"])]
+            stats["submissions"] = int(len(played))
+            stats["uniquePlayers"] = int(
+                grid_subs["user_id"].dropna().astype(str).nunique()
+            )
+            stats["expiredCount"] = int((grid_subs["status"] == "expired").sum())
+            times = played["completion_time"].dropna()
+            if len(times) > 0:
+                stats["medianCompletionTime"] = int(times.median())
+            completed = (
+                played["words_found"].notna()
+                & played["total_words"].notna()
+                & (played["words_found"] == played["total_words"])
+            )
+            if len(played) > 0:
+                stats["completionRate"] = float(
+                    round(completed.sum() / len(played) * 100, 1)
+                )
+
+        per_grid.append(stats)
+
+    # Most recent grid first (grids without data still listed, at their place)
+    per_grid.sort(key=lambda g: (g["gridNumber"] or 0, g["gridId"]), reverse=True)
+    return per_grid
 
 
 def _build_participation_timeline(
