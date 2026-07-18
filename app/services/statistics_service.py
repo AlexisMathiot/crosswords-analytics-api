@@ -10,21 +10,29 @@ from datetime import datetime
 import re
 from dateutil.relativedelta import relativedelta
 
-from app.models import Grid, Progression, Submission, User
+from app.models import DuelMatch, DuelSubmission, Grid, Progression, Submission, User
+
+GRID_TYPES = ("weekly", "izipizi", "duel")
+
+TYPE_LABELS = {
+    "weekly": "Grille de la semaine",
+    "izipizi": "Izipizi",
+    "duel": "Duel",
+}
 
 
 def extract_grid_number(version: str | None) -> int | None:
     """Extract the grid number from a version string.
 
     Args:
-        version: Version string like "1-grid-13.0" or "1-grid-13.2"
+        version: Version string like "1-grid-13.0", "1-izipizi-4.0" or "1-duel-2.1"
 
     Returns:
         int: The grid number (e.g., 13) or None if not found
     """
     if not version:
         return None
-    match = re.search(r"-grid-(\d+)", version)
+    match = re.search(r"-(?:grid|izipizi|duel)-(\d+)", version)
     return int(match.group(1)) if match else None
 
 
@@ -76,7 +84,7 @@ def get_grid_family(db: Session, grid_id: int) -> tuple[Grid, list[int]]:
     return representative_grid, family_ids
 
 
-def get_available_grids(db: Session) -> list[dict]:
+def get_available_grids(db: Session, grid_type: str | None = None) -> list[dict]:
     """Get list of available grids, showing only one grid per family.
 
     When a grid has revisions, only the most recent (revision) is returned.
@@ -84,9 +92,11 @@ def get_available_grids(db: Session) -> list[dict]:
 
     Args:
         db: Database session
+        grid_type: Optional filter on grid type ("weekly", "izipizi", "duel")
 
     Returns:
-        list: List of grid info dicts with id, gridNumber, version
+        list: List of grid info dicts with id, gridNumber, version, type,
+            activatedAt, publishedAt
     """
     # Get all grids
     all_grids = db.query(Grid).order_by(Grid.id).all()
@@ -111,11 +121,20 @@ def get_available_grids(db: Session) -> list[dict]:
             family_grids,
             key=lambda g: (g.is_revision, g.published_at or g.created_at or g.id),
         )
+        if grid_type and representative.type != grid_type:
+            continue
         result.append(
             {
                 "id": representative.id,
                 "gridNumber": extract_grid_number(representative.version),
                 "version": representative.version,
+                "type": representative.type,
+                "activatedAt": representative.activated_at.isoformat()
+                if representative.activated_at
+                else None,
+                "publishedAt": representative.published_at.isoformat()
+                if representative.published_at
+                else None,
             }
         )
 
@@ -971,9 +990,9 @@ def get_user_activity_stats(
     registration_map = dict(zip(df_users["id"], df_users["registration_period"]))
 
     # Total users who have played at least one grid (all time)
-    all_user_ids = db.query(Submission.user_id).union(
-        db.query(Progression.user_id)
-    ).subquery()
+    all_user_ids = (
+        db.query(Submission.user_id).union(db.query(Progression.user_id)).subquery()
+    )
     total_played_users = db.query(func.count()).select_from(all_user_ids).scalar()
 
     return {
@@ -987,3 +1006,128 @@ def get_user_activity_stats(
         "retention": _calculate_retention(users_by_period),
         "activityDistribution": _build_activity_distribution(df),
     }
+
+
+def calculate_type_stats(db: Session) -> dict:
+    """Calculate aggregate statistics per grid type (weekly, izipizi, duel).
+
+    Weekly and izipizi grids are played through the submission table; duel grids
+    go through duel_submission/duel_match, which have no score or joker concept
+    (those metrics are null for the duel type).
+
+    Args:
+        db: Database session
+
+    Returns:
+        dict: {"types": [stats per type, always all three types]}
+    """
+    # Count grid families per type (same family grouping as the grids list)
+    all_grids = db.query(Grid).all()
+    families: dict[int, list[Grid]] = {}
+    for grid in all_grids:
+        root_id = (
+            grid.parent_grid_id if grid.is_revision and grid.parent_grid_id else grid.id
+        )
+        families.setdefault(root_id, []).append(grid)
+
+    grids_per_type = {t: 0 for t in GRID_TYPES}
+    published_per_type = {t: 0 for t in GRID_TYPES}
+    for family_grids in families.values():
+        representative = max(
+            family_grids,
+            key=lambda g: (g.is_revision, g.published_at or g.created_at or g.id),
+        )
+        if representative.type not in grids_per_type:
+            continue
+        grids_per_type[representative.type] += 1
+        if any(g.published_at is not None for g in family_grids):
+            published_per_type[representative.type] += 1
+
+    # Classic submissions (weekly + izipizi) grouped by grid type
+    submissions_query = db.query(
+        Grid.type,
+        Submission.user_id,
+        Submission.final_score,
+        Submission.completion_time_seconds,
+        Submission.words_found,
+        Submission.total_words,
+        Submission.joker_used,
+    ).join(Grid, Submission.grid_id == Grid.id)
+    df_sub = pd.read_sql(submissions_query.statement, db.bind)
+    if not df_sub.empty:
+        df_sub["user_id"] = df_sub["user_id"].astype(str)
+
+    # Duel data
+    duel_query = db.query(
+        DuelSubmission.user_id,
+        DuelSubmission.status,
+        DuelSubmission.completion_time,
+        DuelSubmission.words_found,
+        DuelSubmission.total_words,
+    )
+    df_duel = pd.read_sql(duel_query.statement, db.bind)
+    total_matches = db.query(func.count(DuelMatch.id)).scalar()
+
+    types = []
+    for grid_type in GRID_TYPES:
+        stats = {
+            "type": grid_type,
+            "label": TYPE_LABELS[grid_type],
+            "totalGrids": grids_per_type[grid_type],
+            "publishedGrids": published_per_type[grid_type],
+            "totalPlayers": 0,
+            "totalSubmissions": 0,
+            "averageScore": None,
+            "medianScore": None,
+            "medianCompletionTime": None,
+            "completionRate": None,
+            "jokerUsageRate": None,
+            "totalMatches": None,
+        }
+
+        if grid_type == "duel":
+            stats["totalMatches"] = int(total_matches or 0)
+            if not df_duel.empty:
+                played = df_duel[df_duel["status"].isin(["submitted", "matched"])]
+                stats["totalPlayers"] = int(
+                    df_duel["user_id"].dropna().astype(str).nunique()
+                )
+                stats["totalSubmissions"] = int(len(played))
+                times = played["completion_time"].dropna()
+                if len(times) > 0:
+                    stats["medianCompletionTime"] = int(times.median())
+                completed_mask = (
+                    played["words_found"].notna()
+                    & played["total_words"].notna()
+                    & (played["words_found"] == played["total_words"])
+                )
+                if len(played) > 0:
+                    stats["completionRate"] = float(
+                        round(completed_mask.sum() / len(played) * 100, 1)
+                    )
+        else:
+            if not df_sub.empty:
+                type_df = df_sub[df_sub["type"] == grid_type]
+                if len(type_df) > 0:
+                    stats["totalPlayers"] = int(type_df["user_id"].nunique())
+                    stats["totalSubmissions"] = int(len(type_df))
+                    stats["averageScore"] = float(
+                        round(type_df["final_score"].mean(), 1)
+                    )
+                    stats["medianScore"] = float(
+                        round(type_df["final_score"].median(), 1)
+                    )
+                    stats["medianCompletionTime"] = int(
+                        type_df["completion_time_seconds"].median()
+                    )
+                    completed = (type_df["words_found"] == type_df["total_words"]).sum()
+                    stats["completionRate"] = float(
+                        round(completed / len(type_df) * 100, 1)
+                    )
+                    stats["jokerUsageRate"] = float(
+                        round(type_df["joker_used"].sum() / len(type_df) * 100, 1)
+                    )
+
+        types.append(stats)
+
+    return {"types": types}

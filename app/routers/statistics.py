@@ -4,25 +4,32 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.services import statistics_service
+from app.services import duel_service, premium_service, statistics_service
 
 router = APIRouter()
 
 
 @router.get("/grids")
-async def get_available_grids(db: Session = Depends(get_db)):
+async def get_available_grids(type: str | None = None, db: Session = Depends(get_db)):
     """Get list of available grids.
 
     Returns only one grid per family (parent + revisions).
     When a grid has revisions, only the most recent (revision) is shown.
 
     Args:
+        type: Optional grid type filter ("weekly", "izipizi", "duel")
         db: Database session
 
     Returns:
-        list: List of grids with id, gridNumber, and version
+        list: List of grids with id, gridNumber, version, type, activatedAt,
+            publishedAt
     """
-    return statistics_service.get_available_grids(db)
+    if type is not None and type not in ("weekly", "izipizi", "duel"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid type. Must be 'weekly', 'izipizi' or 'duel'",
+        )
+    return statistics_service.get_available_grids(db, grid_type=type)
 
 
 @router.get("/grid/{grid_id}")
@@ -298,4 +305,93 @@ async def get_global_statistics(
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error calculating global statistics: {str(e)}"
+        )
+
+
+@router.get("/types")
+async def get_type_statistics(db: Session = Depends(get_db)):
+    """Get aggregate statistics per grid type (weekly, izipizi, duel).
+
+    Weekly/izipizi metrics come from classic submissions; duel metrics come
+    from the duel tables (score and joker metrics are null for duels).
+
+    Args:
+        db: Database session
+
+    Returns:
+        dict: {"types": [per-type stats, always all three types]}
+    """
+    try:
+        return statistics_service.calculate_type_stats(db)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error calculating type statistics: {str(e)}"
+        )
+
+
+@router.get("/duels/overview")
+async def get_duel_overview(db: Session = Depends(get_db)):
+    """Get platform-wide duel statistics.
+
+    Args:
+        db: Database session
+
+    Returns:
+        dict: Duel submissions/matches counts, outcomes, completion times,
+            monthly participation timeline and Elo summary
+    """
+    try:
+        return duel_service.get_duel_overview(db)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error calculating duel statistics: {str(e)}"
+        )
+
+
+@router.get("/duels/leaderboard")
+async def get_duel_leaderboard(limit: int = 50, db: Session = Depends(get_db)):
+    """Get the Elo leaderboard.
+
+    Only players with at least 5 duels played are ranked (same eligibility
+    threshold as the main application).
+
+    Args:
+        limit: Maximum number of results (default: 50, max: 1000)
+        db: Database session
+
+    Returns:
+        list: Leaderboard entries with rank, pseudo, rating, win stats
+    """
+    if limit > 1000:
+        limit = 1000
+
+    try:
+        return duel_service.get_elo_leaderboard(db, limit)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching Elo leaderboard: {str(e)}"
+        )
+
+
+@router.get("/premium")
+async def get_premium_statistics(db: Session = Depends(get_db)):
+    """Get premium subscription statistics.
+
+    Refund counts are an estimate: refunds are not persisted in the database,
+    they are inferred from cancellation dates falling outside natural billing
+    period boundaries.
+
+    Args:
+        db: Database session
+
+    Returns:
+        dict: Subscription status breakdown, premium count, pending
+            cancellations, launch promo usage, estimated refunds and a
+            monthly subscription timeline
+    """
+    try:
+        return premium_service.get_premium_stats(db)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error calculating premium statistics: {str(e)}"
         )

@@ -121,7 +121,9 @@ class Submission(Base):
     user_id = Column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    grid_id = Column(Integer, ForeignKey("grids.id", ondelete="CASCADE"), nullable=False)
+    grid_id = Column(
+        Integer, ForeignKey("grids.id", ondelete="CASCADE"), nullable=False
+    )
     correct_cells = Column(Integer, nullable=False)
     base_score = Column(Float, nullable=False)
     time_bonus = Column(Float, nullable=False)
@@ -147,7 +149,9 @@ class Progression(Base):
     user_id = Column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    grid_id = Column(Integer, ForeignKey("grids.id", ondelete="CASCADE"), nullable=False)
+    grid_id = Column(
+        Integer, ForeignKey("grids.id", ondelete="CASCADE"), nullable=False
+    )
     cells = Column(JSON, nullable=False)
     cell_validations = Column(JSON, nullable=True)
     started_at = Column(DateTime, nullable=False)
@@ -158,3 +162,82 @@ class Progression(Base):
     # Relationships
     user = relationship("User", back_populates="progressions")
     grid = relationship("Grid", back_populates="progressions")
+
+
+class DuelMatch(Base):
+    """Duel match entity (resolved pairing of two duel submissions)."""
+
+    __tablename__ = "duel_match"
+
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    grid_id = Column(Integer, ForeignKey("grids.id"), nullable=False)
+    submission1_id = Column(
+        UUID(as_uuid=True), ForeignKey("duel_submission.id"), nullable=False
+    )
+    submission2_id = Column(
+        UUID(as_uuid=True), ForeignKey("duel_submission.id"), nullable=False
+    )
+    winner_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    winner_pseudo = Column(String(255), nullable=True)
+    outcome = Column(String(20), nullable=False)  # submission1 | submission2 | draw
+    player1_elo_change = Column(Integer, nullable=False)
+    player2_elo_change = Column(Integer, nullable=False)
+    resolved_at = Column(DateTime, nullable=False)
+
+
+class DuelSubmission(Base):
+    """Duel submission entity (one player's solve of a duel grid)."""
+
+    __tablename__ = "duel_submission"
+
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    grid_id = Column(
+        Integer, ForeignKey("grids.id", ondelete="CASCADE"), nullable=False
+    )
+    answers = Column(JSON, nullable=True)
+    words_found = Column(Integer, nullable=True)
+    total_words = Column(Integer, nullable=True)
+    completion_time = Column(Integer, nullable=True)
+    started_at = Column(DateTime, nullable=False)
+    submitted_at = Column(DateTime, nullable=True)
+    status = Column(
+        String(20), nullable=False
+    )  # in_progress | submitted | matched | expired
+    duel_match_id = Column(
+        UUID(as_uuid=True), ForeignKey("duel_match.id"), nullable=True
+    )
+    user_pseudo = Column(String(255), nullable=False)
+
+
+class EloRating(Base):
+    """Elo rating entity (one row per user having played duels)."""
+
+    __tablename__ = "elo_rating"
+
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+    rating = Column(Integer, default=1200, nullable=False)
+    duels_played = Column(Integer, default=0, nullable=False)
+    duels_won = Column(Integer, default=0, nullable=False)
+    duels_lost = Column(Integer, default=0, nullable=False)
+
+
+class StripeEventLog(Base):
+    """Stripe webhook event log (idempotency journal)."""
+
+    __tablename__ = "stripe_event_log"
+
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    stripe_event_id = Column(String(255), unique=True, nullable=False)
+    event_type = Column(String(100), nullable=False)
+    processed_at = Column(DateTime, nullable=False)

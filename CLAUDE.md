@@ -45,7 +45,9 @@ app/
 ├── routers/
 │   └── statistics.py         # API endpoints for statistics
 └── services/
-    └── statistics_service.py # Core analytics logic using Pandas/NumPy
+    ├── statistics_service.py # Core analytics logic using Pandas/NumPy
+    ├── duel_service.py       # Duel statistics (duel tables + Elo leaderboard)
+    └── premium_service.py    # Premium subscription stats + refund estimation
 ```
 
 ### Deployment (VPS OVH)
@@ -87,8 +89,12 @@ The API reads from these tables (managed by Symfony v2 / Doctrine migrations):
 - `progression` - In-progress games (UUID, user_id, grid_id, cells JSON, cell_validations, timestamps)
 - `clues` - Grid clues (position references)
 - `words` - Individual words in clues (encrypted answers, positions, directions, alternate answers)
+- `duel_match` - Resolved duel pairings (UUID, two duel_submission FKs, outcome, Elo changes)
+- `duel_submission` - Duel solves (UUID, nullable user_id — SET NULL on account deletion, `completion_time` not `completion_time_seconds`, status: in_progress/submitted/matched/expired)
+- `elo_rating` - One row per duel player (rating, duels played/won/lost; leaderboard eligibility = 5 duels)
+- `stripe_event_log` - Stripe webhook journal (event_type, processed_at) — feeds the subscription timeline
 
-The v2 schema also has duel tables (`duel_match`, `duel_submission`, `elo_rating`) not yet mapped here — candidates for future statistics.
+Grid types (`grids.type`): `weekly`, `izipizi`, `duel`. Duel grids do NOT use the `submission` table — their gameplay lives in the duel tables. Refunds are NOT persisted anywhere: they are estimated in `premium_service.py` from cancellation dates falling off natural billing boundaries (anchor: `cgv_accepted_at`).
 
 **Critical relationships:**
 - One submission per user per grid (enforced by Symfony)
@@ -99,7 +105,7 @@ The v2 schema also has duel tables (`duel_match`, `duel_submission`, `elo_rating
 
 All endpoints are prefixed with `/api/v1/statistics`:
 
-- `GET /grids` - List all available grids
+- `GET /grids?type=` - List all available grids (optional type filter: weekly, izipizi, duel)
 - `GET /grid/{grid_id}` - Comprehensive grid statistics (scores, timing, completion rate, joker usage)
 - `GET /grid/{grid_id}/leaderboard?limit=100` - Top players ranked by score and time
 - `GET /grid/{grid_id}/distribution` - Score distribution bins for histogram visualization
@@ -108,6 +114,10 @@ All endpoints are prefixed with `/api/v1/statistics`:
 - `GET /users/registrations?granularity=month` - New user registrations per week/month
 - `GET /users/activity?months_lookback=6&min_active_months=2` - Active/regular users, retention, activity distribution
 - `GET /global` - Platform-wide statistics (total users, grids, submissions)
+- `GET /types` - Aggregate statistics per grid type (score/joker metrics are null for duels)
+- `GET /duels/overview` - Duel statistics (submissions, matches, outcomes, participation timeline, Elo summary)
+- `GET /duels/leaderboard?limit=50` - Elo leaderboard (players with ≥ 5 duels)
+- `GET /premium` - Premium subscription statistics (status breakdown, estimated refunds, monthly timeline)
 
 **Documentation available at:**
 - Swagger UI: `http://localhost:8000/docs`
@@ -142,7 +152,7 @@ All endpoints are prefixed with `/api/v1/statistics`:
 
 ## Testing
 
-Currently no tests exist (see roadmap). When adding tests:
+Pure-function tests live in `tests/` (refund heuristic, version parsing) — run with `pytest -v`, no database needed. When adding more tests:
 - Use `pytest` and `pytest-asyncio`
 - Test database queries with test fixtures or mocked data
 - Validate Pandas calculations with known sample data
