@@ -243,3 +243,145 @@ class StripeEventLog(Base):
     stripe_event_id: Mapped[str] = mapped_column(String(255), unique=True)
     event_type: Mapped[str] = mapped_column(String(100))
     processed_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class Tournament(Base):
+    """Tournament edition (one per month; 'draft' → 'published' → 'cancelled')."""
+
+    __tablename__ = "tournament"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    prize: Mapped[str] = mapped_column(Text)
+    rules: Mapped[str | None] = mapped_column(Text)
+    start_at: Mapped[datetime] = mapped_column(DateTime)
+    status: Mapped[str] = mapped_column(String(20))  # draft | published | cancelled
+    stripe_price_lookup_key: Mapped[str | None] = mapped_column(String(255))
+    bracket_size: Mapped[int | None] = mapped_column(Integer)  # 16 | 32 | 64
+    qualifying_closed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class TournamentRound(Base):
+    """Tournament window: position 1 = qualifying, 2..7 = rounds 1..6."""
+
+    __tablename__ = "tournament_round"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    tournament_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tournament.id", ondelete="CASCADE")
+    )
+    grid_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("grids.id", ondelete="SET NULL")
+    )
+    position: Mapped[int] = mapped_column(SmallInteger)
+    opens_at: Mapped[datetime] = mapped_column(DateTime)
+    closes_at: Mapped[datetime] = mapped_column(DateTime)
+    opened_at: Mapped[datetime | None] = mapped_column(DateTime)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class TournamentParticipation(Base):
+    """Entry of a user into an edition (survives account deletion: user_id SET NULL)."""
+
+    __tablename__ = "tournament_participation"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    tournament_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tournament.id", ondelete="CASCADE")
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    user_pseudo: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(20))  # qualifying
+    entered_at: Mapped[datetime] = mapped_column(DateTime)
+    qualifying_rank: Mapped[int | None] = mapped_column(Integer)
+
+
+class TournamentSubmission(Base):
+    """One player's solve of a tournament grid (competitive or out of competition)."""
+
+    __tablename__ = "tournament_submission"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    grid_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("grids.id", ondelete="CASCADE")
+    )
+    participation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tournament_participation.id", ondelete="CASCADE"),
+    )
+    user_pseudo: Mapped[str] = mapped_column(String(255))
+    started_at: Mapped[datetime] = mapped_column(DateTime)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime)
+    answers: Mapped[dict | None] = mapped_column(JSON)
+    words_found: Mapped[int | None] = mapped_column(Integer)
+    total_words: Mapped[int | None] = mapped_column(Integer)
+    completion_time: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(
+        String(20)
+    )  # in_progress | submitted | cancelled
+    competitive: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class TournamentSlot(Base):
+    """Bracket slot of a round (position, occupant, vacancy reason, outcome)."""
+
+    __tablename__ = "tournament_slot"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    round_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tournament_round.id", ondelete="CASCADE")
+    )
+    participation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tournament_participation.id")
+    )
+    position: Mapped[int] = mapped_column(SmallInteger)
+    vacancy_reason: Mapped[str | None] = mapped_column(
+        String(30)
+    )  # adversaire_retire | double_absence
+    outcome: Mapped[str | None] = mapped_column(
+        String(30)
+    )  # victoire | elimine | walkover | exemption
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class TournamentTicket(Base):
+    """Paid entry ticket (one 'granted' per user and edition; 'to_refund' = anomaly)."""
+
+    __tablename__ = "tournament_ticket"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE")
+    )
+    tournament_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tournament.id", ondelete="CASCADE")
+    )
+    status: Mapped[str] = mapped_column(String(20))  # granted | to_refund
+    stripe_session_id: Mapped[str] = mapped_column(String(255))
+    stripe_payment_intent_id: Mapped[str | None] = mapped_column(String(255))
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class TournamentBadge(Base):
+    """Badge awarded to a user for an edition (participation → winner)."""
+
+    __tablename__ = "tournament_badge"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE")
+    )
+    tournament_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tournament.id", ondelete="CASCADE")
+    )
+    type: Mapped[str] = mapped_column(
+        String(30)
+    )  # participation | semi_finalist | finalist | winner
+    awarded_at: Mapped[datetime] = mapped_column(DateTime)

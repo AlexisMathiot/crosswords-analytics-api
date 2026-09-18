@@ -47,7 +47,8 @@ app/
 └── services/
     ├── statistics_service.py # Core analytics logic using Pandas/NumPy
     ├── duel_service.py       # Duel statistics (duel tables + Elo leaderboard)
-    └── premium_service.py    # Premium subscription stats + refund estimation
+    ├── premium_service.py    # Premium subscription stats + refund estimation
+    └── tournament_service.py # Tournament stats (editions, entrants, tickets, rounds)
 ```
 
 ### Deployment (VPS OVH)
@@ -93,8 +94,15 @@ The API reads from these tables (managed by Symfony v2 / Doctrine migrations):
 - `duel_submission` - Duel solves (UUID, nullable user_id — SET NULL on account deletion, `completion_time` not `completion_time_seconds`, status: in_progress/submitted/matched/expired)
 - `elo_rating` - One row per duel player (rating, duels played/won/lost; leaderboard eligibility = 5 duels)
 - `stripe_event_log` - Stripe webhook journal (event_type, processed_at) — feeds the subscription timeline
+- `tournament` - Monthly edition (UUID, name, prize, start_at, status draft/published/cancelled, bracket_size 16/32/64, qualifying_closed_at, closed_at)
+- `tournament_round` - Calendar windows, always 7 per edition (position 1 = qualifying, 2..7 = rounds 1..6; only log2(bracket_size) rounds are played), nullable grid_id
+- `tournament_participation` - Entry of a user into an edition, created at first competitive start (user_id SET NULL on account deletion, user_pseudo copied, qualifying_rank)
+- `tournament_submission` - One solve per (user, grid); `competitive` false = out-of-competition replay; status in_progress/submitted/cancelled; linked to its edition through participation_id (never through the grid)
+- `tournament_slot` - Bracket slots per round (participation_id nullable + vacancy_reason, outcome victoire/elimine/walkover/exemption)
+- `tournament_ticket` - Paid entry (status granted/to_refund; only `granted` is an entry right; CASCADE on account deletion)
+- `tournament_badge` - participation/semi_finalist/finalist/winner per (user, edition)
 
-Grid types (`grids.type`): `weekly`, `izipizi`, `duel`. Duel grids do NOT use the `submission` table — their gameplay lives in the duel tables. Refunds are NOT persisted anywhere: they are estimated in `premium_service.py` from cancellation dates falling off natural billing boundaries (anchor: `cgv_accepted_at`).
+Grid types (`grids.type`): `weekly`, `izipizi`, `duel`, `tournament`. Duel and tournament grids do NOT use the `submission` table — their gameplay lives in the duel / tournament tables. Tournament access is premium OR a `granted` ticket; premium status is not historised, so the entrants split (ticket / premium / other) in `tournament_service.py` is an estimate evaluated as of today. Refunds are NOT persisted anywhere: they are estimated in `premium_service.py` from cancellation dates falling off natural billing boundaries (anchor: `cgv_accepted_at`).
 
 **Critical relationships:**
 - One submission per user per grid (enforced by Symfony)
@@ -105,7 +113,7 @@ Grid types (`grids.type`): `weekly`, `izipizi`, `duel`. Duel grids do NOT use th
 
 All endpoints are prefixed with `/api/v1/statistics`:
 
-- `GET /grids?type=` - List all available grids (optional type filter: weekly, izipizi, duel)
+- `GET /grids?type=` - List all available grids (optional type filter: weekly, izipizi, duel, tournament)
 - `GET /grid/{grid_id}` - Comprehensive grid statistics (scores, timing, completion rate, joker usage)
 - `GET /grid/{grid_id}/leaderboard?limit=100` - Top players ranked by score and time
 - `GET /grid/{grid_id}/distribution` - Score distribution bins for histogram visualization
@@ -118,6 +126,8 @@ All endpoints are prefixed with `/api/v1/statistics`:
 - `GET /duels/overview` - Duel statistics (submissions, matches, outcomes, participation timeline, Elo summary)
 - `GET /duels/leaderboard?limit=50` - Elo leaderboard (players with ≥ 5 duels)
 - `GET /premium` - Premium subscription statistics (status breakdown, estimated refunds, monthly timeline)
+- `GET /tournaments/overview` - Tournament overview (editions by status, entrants by access mode, tickets granted/to_refund, badges, monthly timeline, one summary row per edition)
+- `GET /tournaments/{tournament_id}` - Edition detail (entrants, tickets + daily purchase timeline, competitive/out-of-competition submissions, per-window stats with bracket slots and outcomes, badges, winner)
 
 **Documentation available at:**
 - Swagger UI: `http://localhost:8000/docs`
@@ -152,7 +162,7 @@ All endpoints are prefixed with `/api/v1/statistics`:
 
 ## Testing
 
-Pure-function tests live in `tests/` (refund heuristic, version parsing) — run with `pytest -v`, no database needed. When adding more tests:
+Pure-function tests live in `tests/` (refund heuristic, version parsing, tournament helpers) — run with `pytest -v`, no database needed (root `conftest.py` makes `app` importable). When adding more tests:
 - Use `pytest` and `pytest-asyncio`
 - Test database queries with test fixtures or mocked data
 - Validate Pandas calculations with known sample data

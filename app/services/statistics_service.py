@@ -25,14 +25,15 @@ def extract_grid_number(version: str | None) -> int | None:
     """Extract the grid number from a version string.
 
     Args:
-        version: Version string like "1-grid-13.0", "1-izipizi-4.0" or "1-duel-2.1"
+        version: Version string like "1-grid-13.0", "1-izipizi-4.0",
+            "1-duel-2.1" or "1-tournament-1.0"
 
     Returns:
         int: The grid number (e.g., 13) or None if not found
     """
     if not version:
         return None
-    match = re.search(r"-(?:grid|izipizi|duel)-(\d+)", version)
+    match = re.search(r"-(?:grid|izipizi|duel|tournament)-(\d+)", version)
     return int(match.group(1)) if match else None
 
 
@@ -92,7 +93,8 @@ def get_available_grids(db: Session, grid_type: str | None = None) -> list[dict]
 
     Args:
         db: Database session
-        grid_type: Optional filter on grid type ("weekly", "izipizi", "duel")
+        grid_type: Optional filter on grid type ("weekly", "izipizi", "duel",
+            "tournament")
 
     Returns:
         list: List of grid info dicts with id, gridNumber, version, type,

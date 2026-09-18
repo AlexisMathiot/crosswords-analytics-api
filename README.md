@@ -18,7 +18,7 @@ Service d'analyse et de statistiques pour l'application Crosswords (onsengrilleu
 
 ### Endpoints Statistiques
 
-- `GET /api/v1/statistics/grids?type=` - Liste des grilles disponibles (filtre optionnel par type : weekly, izipizi, duel)
+- `GET /api/v1/statistics/grids?type=` - Liste des grilles disponibles (filtre optionnel par type : weekly, izipizi, duel, tournament)
 - `GET /api/v1/statistics/grid/{grid_id}` - Statistiques complètes d'une grille
 - `GET /api/v1/statistics/grid/{grid_id}/leaderboard` - Classement des joueurs
 - `GET /api/v1/statistics/grid/{grid_id}/distribution` - Distribution des scores (histogramme)
@@ -31,6 +31,8 @@ Service d'analyse et de statistiques pour l'application Crosswords (onsengrilleu
 - `GET /api/v1/statistics/duels/overview` - Vue d'ensemble des duels (soumissions, matchs, résultats, Elo)
 - `GET /api/v1/statistics/duels/leaderboard?limit=50` - Classement Elo (minimum 5 duels joués)
 - `GET /api/v1/statistics/premium` - Statistiques d'abonnement premium (statuts, remboursements estimés, timeline)
+- `GET /api/v1/statistics/tournaments/overview` - Vue d'ensemble du tournoi (éditions, participants par mode d'accès, tickets, badges, timeline, résumé par édition)
+- `GET /api/v1/statistics/tournaments/{tournament_id}` - Détail d'une édition (participants, tickets et courbe d'achat, qualifications, tours et tableau, hors compétition, badges, vainqueur)
 
 ### Métriques Calculées
 
@@ -213,6 +215,7 @@ L'API Symfony peut appeler ce service pour obtenir des statistiques sans surchar
 - [x] Statistiques duels / ELO (nouvelles tables v2)
 - [x] Statistiques par type de grille
 - [x] Statistiques abonnements premium
+- [x] Statistiques tournoi (éditions, participants, tickets, tours)
 - [ ] Tests unitaires et d'intégration (premiers tests sur les fonctions pures)
 - [ ] Cache Redis implémenté
 - [ ] Analyse de mots (taux de succès par mot)

@@ -1,10 +1,17 @@
 """Statistics router with analytics endpoints."""
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.services import duel_service, premium_service, statistics_service
+from app.services import (
+    duel_service,
+    premium_service,
+    statistics_service,
+    tournament_service,
+)
 
 router = APIRouter()
 
@@ -17,17 +24,18 @@ async def get_available_grids(type: str | None = None, db: Session = Depends(get
     When a grid has revisions, only the most recent (revision) is shown.
 
     Args:
-        type: Optional grid type filter ("weekly", "izipizi", "duel")
+        type: Optional grid type filter ("weekly", "izipizi", "duel",
+            "tournament")
         db: Database session
 
     Returns:
         list: List of grids with id, gridNumber, version, type, activatedAt,
             publishedAt
     """
-    if type is not None and type not in ("weekly", "izipizi", "duel"):
+    if type is not None and type not in ("weekly", "izipizi", "duel", "tournament"):
         raise HTTPException(
             status_code=400,
-            detail="Invalid type. Must be 'weekly', 'izipizi' or 'duel'",
+            detail="Invalid type. Must be 'weekly', 'izipizi', 'duel' or 'tournament'",
         )
     return statistics_service.get_available_grids(db, grid_type=type)
 
@@ -394,4 +402,57 @@ async def get_premium_statistics(db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error calculating premium statistics: {str(e)}"
+        )
+
+
+@router.get("/tournaments/overview")
+async def get_tournament_overview(db: Session = Depends(get_db)):
+    """Get platform-wide tournament statistics.
+
+    Entrants are split by access mode (ticket / premium / other). The premium
+    status is only known as of today (not historised), so that split is an
+    estimate — see the `entrantsNote` field.
+
+    Args:
+        db: Database session
+
+    Returns:
+        dict: Editions by status, entrants (unique, returning, by access mode),
+            tickets (granted / to_refund, unique buyers), competitive
+            submissions, badges, monthly timeline and one summary row per
+            edition (most recent first)
+    """
+    try:
+        return tournament_service.get_tournament_overview(db)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error calculating tournament statistics: {str(e)}",
+        )
+
+
+@router.get("/tournaments/{tournament_id}")
+async def get_tournament_detail(
+    tournament_id: uuid.UUID, db: Session = Depends(get_db)
+):
+    """Get detailed statistics for one tournament edition.
+
+    Args:
+        tournament_id: Edition UUID
+        db: Database session
+
+    Returns:
+        dict: Edition info, entrants by access mode, tickets with daily
+            purchase timeline, daily entries timeline, competitive submission
+            stats, per-window stats (qualifying + rounds: submissions, bracket
+            slots, outcomes), out-of-competition activity, badges and winner
+    """
+    try:
+        return tournament_service.get_tournament_detail(db, tournament_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error calculating tournament statistics: {str(e)}",
         )
