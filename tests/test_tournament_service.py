@@ -77,37 +77,53 @@ def test_played_rounds_count():
 def test_qualifying_window_label():
     info = label_round(1, 64)
     assert info["roundNumber"] is None
-    assert info["label"] == "Qualifications"
+    assert info["label"] == "1er tour"
     assert info["played"] is True
 
 
 def test_round_labels_for_bracket_of_16():
-    assert label_round(2, 16)["label"] == "Tour 1 (16 joueurs)"
+    assert label_round(2, 16)["label"] == "Huitièmes de finale"
     assert label_round(3, 16)["label"] == "Quarts de finale"
     assert label_round(4, 16)["label"] == "Demi-finales"
-    assert label_round(5, 16)["label"] == "Finale"
+    assert label_round(5, 16)["label"] == "La Grande Finale"
     assert label_round(5, 16)["roundNumber"] == 4
     assert label_round(5, 16)["players"] == 2
 
 
+def test_round_labels_for_bracket_of_32():
+    assert label_round(2, 32)["label"] == "2e tour"
+    assert label_round(3, 32)["label"] == "Huitièmes de finale"
+    assert label_round(6, 32)["label"] == "La Grande Finale"
+
+
 def test_round_labels_for_bracket_of_64():
-    assert label_round(2, 64)["label"] == "Tour 1 (64 joueurs)"
-    assert label_round(3, 64)["label"] == "Tour 2 (32 joueurs)"
-    assert label_round(7, 64)["label"] == "Finale"
+    assert [label_round(p, 64)["label"] for p in range(1, 8)] == [
+        "1er tour",
+        "2e tour",
+        "3e tour",
+        "Huitièmes de finale",
+        "Quarts de finale",
+        "Demi-finales",
+        "La Grande Finale",
+    ]
 
 
-def test_unused_windows_are_flagged_not_played():
+def test_unused_windows_are_bonus_grids_not_played():
     info = label_round(6, 16)  # window 6 = round 5, a bracket of 16 stops at round 4
     assert info["played"] is False
     assert info["roundNumber"] == 5
-    assert info["label"] == "Tour 5"
+    assert info["label"] == "Grille bonus"
     assert info["players"] is None
+    assert label_round(7, 32)["label"] == "Grille bonus"
 
 
-def test_unknown_bracket_size_flags_rounds_not_played():
+def test_unknown_bracket_size_presumes_64_and_flags_rounds_not_played():
     info = label_round(2, None)
     assert info["played"] is False
-    assert info["label"] == "Tour 1"
+    assert info["players"] is None
+    assert info["label"] == "2e tour"
+    assert label_round(4, None)["label"] == "Huitièmes de finale"
+    assert label_round(7, None)["label"] == "La Grande Finale"
 
 
 # --- submissions ---------------------------------------------------------------

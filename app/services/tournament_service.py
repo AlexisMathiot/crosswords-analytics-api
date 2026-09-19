@@ -12,7 +12,8 @@ Data model reminders (Symfony API v2, see the entity docblocks there):
 - Access to an edition is granted either by a premium subscription or by a
   ``granted`` ticket. A ``to_refund`` ticket is a payment anomaly (double
   purchase, ...), never an entry right.
-- Rounds: ``position`` 1 = qualifying, 2..7 = rounds 1..6. The calendar always
+- Rounds: ``position`` 1 = qualifying (« 1er tour » on the site), 2..7 = rounds 1..6
+  (« 2e tour »…). The calendar always
   holds 7 windows; only ``log2(bracket_size)`` rounds are actually played.
 """
 
@@ -115,12 +116,42 @@ def played_rounds_count(bracket_size: int | None) -> int | None:
     return int(math.log2(bracket_size))
 
 
+PRESUMED_BRACKET_SIZE = 64  # tableau présumé tant que la clôture des qualifs n'a rien figé (site : issue #246)
+BONUS_LABEL = "Grille bonus"  # fenêtre au-delà du tableau figé (site : issue #237)
+
+
+def _numbered_round_label(round_number: int) -> str:
+    """Site nomenclature: qualifying is the « 1er tour », so bracket round N is « {N+1}e tour »."""
+    return f"{round_number + 1}e tour"
+
+
+def _bracket_round_label(bracket_size: int, round_number: int) -> str:
+    """Same rule as the site (TournamentRoundLabeler): named by players remaining."""
+    players = bracket_size // (2 ** (round_number - 1))
+    if players == 2:
+        return "La Grande Finale"
+    if players == 4:
+        return "Demi-finales"
+    if players == 8:
+        return "Quarts de finale"
+    if players == 16:
+        return "Huitièmes de finale"
+    return _numbered_round_label(round_number)
+
+
 def label_round(position: int, bracket_size: int | None) -> dict:
     """Describe a calendar window (position 1..7) for a given bracket size.
 
+    Labels follow the site nomenclature (crosswords-api ``TournamentRoundLabeler``):
+    the qualifying window is the « 1er tour », bracket rounds are named by the
+    number of players remaining (« 2e tour », « 3e tour », « Huitièmes de finale »,
+    « Quarts de finale », « Demi-finales », « La Grande Finale »). While the bracket
+    size is unknown (qualifying still open) a bracket of 64 is presumed, as on the
+    site; a window beyond a frozen bracket is the « Grille bonus ».
+
     Returns a dict with:
         - roundNumber: None for qualifying, else 1..6
-        - label: human label (Qualifications, Tour 1, Quarts de finale, ...)
+        - label: human label, identical to the site
         - players: players entering this round (None for qualifying / unknown)
         - played: False when the window is beyond the rounds needed by the
           bracket size (calendar always holds 7 windows), or when the bracket
@@ -129,35 +160,34 @@ def label_round(position: int, bracket_size: int | None) -> dict:
     if position == QUALIFYING_POSITION:
         return {
             "roundNumber": None,
-            "label": "Qualifications",
+            "label": "1er tour",
             "players": None,
             "played": True,
         }
 
     round_number = position - QUALIFYING_POSITION
     rounds_needed = played_rounds_count(bracket_size)
-    if bracket_size is None or rounds_needed is None or round_number > rounds_needed:
+
+    if bracket_size is None or rounds_needed is None:
         return {
             "roundNumber": round_number,
-            "label": f"Tour {round_number}",
+            "label": _bracket_round_label(PRESUMED_BRACKET_SIZE, round_number),
             "players": None,
             "played": False,
         }
 
-    players = bracket_size // (2 ** (round_number - 1))
-    if players == 2:
-        label = "Finale"
-    elif players == 4:
-        label = "Demi-finales"
-    elif players == 8:
-        label = "Quarts de finale"
-    else:
-        label = f"Tour {round_number} ({players} joueurs)"
+    if round_number > rounds_needed:
+        return {
+            "roundNumber": round_number,
+            "label": BONUS_LABEL,
+            "players": None,
+            "played": False,
+        }
 
     return {
         "roundNumber": round_number,
-        "label": label,
-        "players": players,
+        "label": _bracket_round_label(bracket_size, round_number),
+        "players": bracket_size // (2 ** (round_number - 1)),
         "played": True,
     }
 
